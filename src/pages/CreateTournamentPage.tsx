@@ -1,0 +1,83 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import PageShell from '@/components/PageShell';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { TableBrand, PlayStyle, TournamentFormat, PairingMode, Tournament } from '@/types';
+import { MOCK_TOURNAMENTS, MOCK_USER } from '@/data/mock';
+import { toast } from 'sonner';
+
+const STEPS = ['Información', 'Formato', 'Estilo', 'Localización', 'Inscripción', 'Categorías', 'Premios', 'Vista previa'];
+const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
+const FORMATS: { key: TournamentFormat; label: string }[] = [
+  { key: 'eliminacion_simple', label: 'Eliminación simple' },
+  { key: 'eliminacion_doble', label: 'Eliminación doble' },
+  { key: 'round_robin', label: 'Round Robin / Liguilla' },
+  { key: 'grupos_cuadro', label: 'Grupos + Cuadro final' },
+  { key: 'suizo', label: 'Sistema suizo' },
+  { key: 'americano', label: 'Americano' },
+  { key: 'rey_mesa', label: 'Rey de la mesa' },
+];
+const PAIRING_MODES: { key: PairingMode; label: string; desc: string }[] = [
+  { key: 'inscripcion', label: 'Por inscripción', desc: 'Las parejas vienen formadas' },
+  { key: 'equilibradas', label: 'Parejas equilibradas', desc: 'La app crea parejas por ELO' },
+  { key: 'random', label: 'Random', desc: 'Parejas completamente aleatorias' },
+];
+
+export default function CreateTournamentPage() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState({
+    name: '', description: '', date: '', time: '',
+    venueName: '', city: '',
+    tableBrand: 'Presas' as TableBrand, playStyle: 'parado' as PlayStyle,
+    format: 'eliminacion_simple' as TournamentFormat, pairingMode: 'inscripcion' as PairingMode,
+    maxPairs: 16, hasWaitlist: false, entryFee: '', prizes: '',
+    requiresApproval: false, hasCategories: false, categories: [''],
+  });
+  const update = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
+
+  const handleCreateTournament = () => {
+    if (!form.name.trim()) { toast.error('El nombre del torneo es obligatorio'); return; }
+    const newId = `to_${Date.now()}`;
+    const newTournament: Tournament = {
+      id: newId, name: form.name, description: form.description,
+      date: form.date || new Date().toISOString().split('T')[0], time: form.time || '18:00',
+      venueId: '', venueName: form.venueName || 'Por definir', city: form.city || 'Sin ciudad',
+      tableBrand: form.tableBrand, playStyle: form.playStyle, format: form.format,
+      pairingMode: form.pairingMode, maxPairs: form.maxPairs, hasWaitlist: form.hasWaitlist,
+      entryFee: form.entryFee ? parseInt(form.entryFee) : undefined, prizes: form.prizes || undefined,
+      organizerId: MOCK_USER.id, organizerName: MOCK_USER.displayName, requiresApproval: form.requiresApproval,
+      status: 'abierto', hasCategories: form.hasCategories,
+      categories: form.hasCategories ? form.categories.filter(c => c.trim()).map((c, i) => ({ id: `cat_${newId}_${i}`, tournamentId: newId, name: c })) : [],
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    MOCK_TOURNAMENTS.push(newTournament);
+    toast.success('¡Torneo creado correctamente!');
+    navigate(`/torneos/${newId}`);
+  };
+
+  const renderStep = () => {
+    switch (step) {
+      case 0: return (<div className="flex flex-col gap-4"><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nombre del torneo</label><input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ej: Torneo Gran Vía" value={form.name} onChange={e => update('name', e.target.value)} /></div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha</label><input type="date" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.date} onChange={e => update('date', e.target.value)} /></div><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hora</label><input type="time" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.time} onChange={e => update('time', e.target.value)} /></div></div><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descripción</label><textarea className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" rows={4} placeholder="Reglas, premios..." value={form.description} onChange={e => update('description', e.target.value)} /></div></div>);
+      case 1: return (<div className="flex flex-col gap-3"><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formato del torneo</p>{FORMATS.map(f => (<button key={f.key} onClick={() => update('format', f.key)} className={`rounded-lg border p-3 text-left text-sm font-medium transition ${form.format === f.key ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{f.label}</button>))}</div>);
+      case 2: return (<div className="flex flex-col gap-4"><div><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Estilo de juego</p><div className="flex gap-2">{(['parado', 'movimiento'] as PlayStyle[]).map(s => (<button key={s} onClick={() => update('playStyle', s)} className={`flex-1 rounded-lg border p-3 text-center text-sm font-semibold capitalize transition ${form.playStyle === s ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{s}</button>))}</div></div></div>);
+      case 3: return (<div className="flex flex-col gap-4"><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Local</label><input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Nombre del local" value={form.venueName} onChange={e => update('venueName', e.target.value)} /></div><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ciudad</label><input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ciudad" value={form.city} onChange={e => update('city', e.target.value)} /></div><div><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tipo de mesa</p><div className="flex flex-wrap gap-1.5">{TABLE_BRANDS.map(b => (<button key={b} onClick={() => update('tableBrand', b)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${form.tableBrand === b ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{b}</button>))}</div></div></div>);
+      case 4: return (<div className="flex flex-col gap-4"><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nº máximo de parejas</label><input type="number" min={2} className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.maxPairs} onChange={e => update('maxPairs', parseInt(e.target.value) || 2)} /></div><div><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Modo de parejas</p>{PAIRING_MODES.map(m => (<button key={m.key} onClick={() => update('pairingMode', m.key)} className={`mb-2 w-full rounded-lg border p-3 text-left transition ${form.pairingMode === m.key ? 'border-primary bg-primary/5' : 'border-border'}`}><p className={`text-sm font-semibold ${form.pairingMode === m.key ? 'text-primary' : 'text-foreground'}`}>{m.label}</p><p className="text-xs text-muted-foreground">{m.desc}</p></button>))}</div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.hasWaitlist} onChange={e => update('hasWaitlist', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />Lista de espera</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.requiresApproval} onChange={e => update('requiresApproval', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />Requiere aprobación</label></div>);
+      case 5: return (<div className="flex flex-col gap-4"><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.hasCategories} onChange={e => update('hasCategories', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />Activar categorías</label>{form.hasCategories && (<div className="flex flex-col gap-2"><p className="text-xs text-muted-foreground">Ej: Máster, Pro, Ciego</p>{form.categories.map((cat, i) => (<input key={i} className="w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder={`Categoría ${i + 1}`} value={cat} onChange={e => { const cats = [...form.categories]; cats[i] = e.target.value; update('categories', cats); }} />))}<button onClick={() => update('categories', [...form.categories, ''])} className="text-xs font-medium text-primary">+ Añadir categoría</button></div>)}</div>);
+      case 6: return (<div className="flex flex-col gap-4"><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Precio de inscripción (€)</label><input type="number" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Opcional" value={form.entryFee} onChange={e => update('entryFee', e.target.value)} /></div><div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Premios</label><textarea className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" rows={3} placeholder="1º: 100€ | 2º: 50€" value={form.prizes} onChange={e => update('prizes', e.target.value)} /></div></div>);
+      case 7: return (<div className="flex flex-col gap-3"><div className="rounded-xl bg-card p-4 shadow-card"><h3 className="font-display text-lg font-bold">{form.name || 'Sin nombre'}</h3><div className="mt-2 flex flex-wrap gap-1.5 text-xs"><span className="rounded-md bg-primary/10 px-2 py-0.5 font-semibold text-primary">{form.tableBrand}</span><span className="rounded-md bg-accent/30 px-2 py-0.5 font-semibold text-accent-foreground capitalize">{form.playStyle}</span><span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">{FORMATS.find(f => f.key === form.format)?.label}</span></div><div className="mt-3 space-y-1 text-sm text-muted-foreground"><p>📅 {form.date || '—'} · {form.time || '—'}</p><p>📍 {form.venueName || '—'}, {form.city || '—'}</p><p>👥 {form.maxPairs} parejas máx.</p>{form.entryFee && <p>💰 {form.entryFee}€</p>}</div>{form.description && <p className="mt-3 text-sm text-foreground">{form.description}</p>}</div><button onClick={handleCreateTournament} className="w-full rounded-xl bg-secondary py-3 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]">Crear torneo</button></div>);
+      default: return null;
+    }
+  };
+
+  return (
+    <PageShell title="Crear torneo">
+      <div className="mb-4"><div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold text-primary">{STEPS[step]}</span><span className="text-xs text-muted-foreground">{step + 1}/{STEPS.length}</span></div><div className="h-1.5 w-full rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div></div>
+      {renderStep()}
+      <div className="mt-6 flex gap-3">
+        {step > 0 && (<button onClick={() => setStep(s => s - 1)} className="flex items-center gap-1 rounded-lg bg-muted px-4 py-2.5 text-sm font-medium text-muted-foreground transition active:scale-95"><ChevronLeft className="h-4 w-4" /> Anterior</button>)}
+        {step < STEPS.length - 1 && (<button onClick={() => setStep(s => s + 1)} className="ml-auto flex items-center gap-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition active:scale-95">Siguiente <ChevronRight className="h-4 w-4" /></button>)}
+      </div>
+    </PageShell>
+  );
+}
