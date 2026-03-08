@@ -145,21 +145,40 @@ export default function VenueDetailPage() {
           </button>
         </div>
         {leagues.length > 0 ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {leagues.map(league => {
               const standings = getLeagueStandings(league.id);
+              const leagueTournamentIds = new Set(league.tournamentIds);
+              const availableTournaments = venueTournaments.filter(t => !leagueTournamentIds.has(t.id));
               return (
                 <div key={league.id} className="rounded-lg bg-muted p-3">
                   <p className="text-sm font-semibold mb-2">{league.name}</p>
                   <p className="text-[10px] text-muted-foreground mb-1">{league.tournamentIds.length} torneo(s) asociado(s)</p>
                   {standings.length > 0 && (
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 mb-2">
                       {standings.slice(0, 5).map((s, i) => (
                         <div key={s.userId} className="flex items-center justify-between text-xs">
                           <span><span className="font-bold text-primary mr-1">{i + 1}.</span>{s.displayName}</span>
                           <span className="font-semibold">{s.points} pts</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {availableTournaments.length > 0 && (
+                    <div className="mt-2 border-t border-border pt-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Añadir torneo a la liga</p>
+                      <div className="flex flex-col gap-1">
+                        {availableTournaments.map(t => (
+                          <button key={t.id} onClick={() => {
+                            addTournamentToLeague(league.id, t.id);
+                            toast.success(`Torneo "${t.name}" añadido a la liga`);
+                            forceUpdate(n => n + 1);
+                          }} className="flex items-center justify-between rounded bg-card px-2.5 py-1.5 text-xs hover:bg-primary/5 transition">
+                            <span className="font-medium">{t.name}</span>
+                            <span className="text-primary text-[10px]">+ Añadir</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

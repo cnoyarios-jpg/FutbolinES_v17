@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer } from '@/data/mock';
-import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X } from 'lucide-react';
+import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason } from '@/data/mock';
+import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus } from 'lucide-react';
 import { TableBrand } from '@/types';
+import { toast } from 'sonner';
 
 type RankingTab = 'individual' | 'parejas' | 'equipos' | 'bares';
 type RankingView = 'general' | 'porteros' | 'delanteros';
@@ -14,6 +15,17 @@ export default function RankingsPage() {
   const [tab, setTab] = useState<RankingTab>('individual');
   const [view, setView] = useState<RankingView>('general');
   const [showFilters, setShowFilters] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  // Season state
+  const [showSeasonDialog, setShowSeasonDialog] = useState(false);
+  const [seasonName, setSeasonName] = useState('');
+  const [seasonStart, setSeasonStart] = useState('');
+  const [seasonEnd, setSeasonEnd] = useState('');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
+
+  const seasons = getSeasons();
+  const activeSeason = getActiveSeason();
 
   // Filters
   const [filterPosition, setFilterPosition] = useState<string>('');
@@ -30,6 +42,18 @@ export default function RankingsPage() {
     setFilterVenue('');
   };
 
+  const handleCreateSeason = () => {
+    if (!seasonName.trim() || !seasonStart || !seasonEnd) {
+      toast.error('Nombre, fecha inicio y fecha fin son obligatorios');
+      return;
+    }
+    createSeason(seasonName, seasonStart, seasonEnd);
+    setSeasonName(''); setSeasonStart(''); setSeasonEnd('');
+    setShowSeasonDialog(false);
+    toast.success('Temporada creada');
+    forceUpdate(n => n + 1);
+  };
+
   // Get venue player IDs for venue filter
   const getVenuePlayerIds = (venueId: string): Set<string> => {
     const ids = new Set<string>();
@@ -42,10 +66,40 @@ export default function RankingsPage() {
     return ids;
   };
 
+  // Filter by season if selected
+  const getSeasonTournamentIds = (): Set<string> | null => {
+    const seasonId = selectedSeasonId || activeSeason?.id;
+    if (!seasonId) return null;
+    const season = seasons.find(s => s.id === seasonId);
+    if (!season) return null;
+    const ids = new Set<string>();
+    MOCK_TOURNAMENTS.forEach(t => {
+      if (t.date >= season.startDate && t.date <= season.endDate) ids.add(t.id);
+    });
+    return ids;
+  };
+
+  const getSeasonPlayerIds = (): Set<string> | null => {
+    const tournamentIds = getSeasonTournamentIds();
+    if (!tournamentIds) return null;
+    const playerIds = new Set<string>();
+    MOCK_PAIRS.forEach(p => {
+      if (tournamentIds.has(p.tournamentId)) {
+        playerIds.add(p.goalkeeper.userId);
+        playerIds.add(p.forward.userId);
+      }
+    });
+    return playerIds;
+  };
+
   const registeredOnly = MOCK_RANKINGS.filter(r => r.playerType !== 'invitado');
 
   // Apply filters
   let filtered = registeredOnly;
+  const seasonPlayerIds = getSeasonPlayerIds();
+  if (seasonPlayerIds) {
+    filtered = filtered.filter(r => seasonPlayerIds.has(r.userId));
+  }
   if (filterPosition) {
     filtered = filtered.filter(r => r.preferredPosition === filterPosition);
   }
@@ -77,8 +131,37 @@ export default function RankingsPage() {
   const teamsSorted = [...MOCK_TEAMS].sort((a, b) => b.elo - a.elo);
   const activeVenues = MOCK_VENUES.filter(v => v.status === 'activo');
 
+  const currentSeasonLabel = selectedSeasonId
+    ? seasons.find(s => s.id === selectedSeasonId)?.name || 'Temporada'
+    : activeSeason?.name || 'Todas las temporadas';
+
   return (
     <PageShell title="Ranking">
+      {/* Season selector */}
+      {(seasons.length > 0 || tab === 'individual') && (
+        <div className="mb-3 flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+          <select
+            value={selectedSeasonId}
+            onChange={e => { setSelectedSeasonId(e.target.value); forceUpdate(n => n + 1); }}
+            className="flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">Todas las temporadas</option>
+            {seasons.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name} {s.isActive ? '(actual)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => setShowSeasonDialog(true)}
+            className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
+          >
+            <Plus className="h-3 w-3" /> Nueva
+          </button>
+        </div>
+      )}
+
       {/* Tab selector */}
       <div className="mb-4 flex gap-1 overflow-x-auto">
         {([
@@ -287,6 +370,42 @@ export default function RankingsPage() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* CREATE SEASON DIALOG */}
+      {showSeasonDialog && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Nueva temporada</h3>
+              <button onClick={() => setShowSeasonDialog(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nombre *</label>
+                <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Ej: Temporada 2026" value={seasonName} onChange={e => setSeasonName(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inicio *</label>
+                  <input type="date" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={seasonStart} onChange={e => setSeasonStart(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fin *</label>
+                  <input type="date" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={seasonEnd} onChange={e => setSeasonEnd(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">La temporada anterior se desactivará automáticamente.</p>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowSeasonDialog(false)} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={handleCreateSeason} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground">Crear</button>
+            </div>
+          </div>
         </div>
       )}
     </PageShell>
