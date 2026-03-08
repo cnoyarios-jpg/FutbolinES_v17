@@ -403,28 +403,7 @@ export function updateTeamStats(teamId: string, updates: Partial<TeamStats>) {
 // ===== MVP / JUGADOR DEL TORNEO =====
 
 export function setTournamentMVP(tournamentId: string, playerId: string, playerName: string) {
-  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
-  if (!tournament) return;
-  tournament.mvpPlayerId = playerId;
-  tournament.mvpPlayerName = playerName;
-
-  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
-  const allElos: number[] = [];
-  pairs.forEach(p => { allElos.push(p.goalkeeper.elo, p.forward.elo); });
-  const avgElo = allElos.length > 0 ? allElos.reduce((a, b) => a + b, 0) / allElos.length : 1500;
-  const bonus = Math.round(5 + Math.max(0, (avgElo - 1500)) * 0.02);
-  const cappedBonus = Math.min(bonus, 20);
-
-  const ranking = MOCK_RANKINGS.find(r => r.userId === playerId);
-  if (ranking) {
-    ranking.general += cappedBonus;
-    ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-  }
-
-  // Achievement: MVP
-  checkAndGrantAchievement(playerId, 'mvp_tournament');
-  persistRankings();
-  persistTournaments();
+  setTournamentMvp(tournamentId, playerId, playerName);
 }
 
 export function getTournamentMVPBonus(tournamentId: string): number {
