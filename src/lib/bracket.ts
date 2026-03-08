@@ -61,21 +61,31 @@ function nextPowerOf2(n: number): number {
 
 /**
  * Standard bracket seeding: seed 1 vs seed N, seed 2 vs seed N-1, etc.
- * This ensures top seeds get byes when the field isn't a power of 2.
+ * Returns seedOrder where seedOrder[seedIndex] = slotPosition.
+ * Ensures top seeds get byes when the field isn't a power of 2.
  */
 function generateSeedOrder(size: number): number[] {
-  let result = [0];
+  if (size <= 1) return [0];
+
+  // Build bracket[slot] = seed (1-indexed) using standard interleaving
   const rounds = Math.log2(size);
-  for (let round = 1; round <= rounds; round++) {
-    const sum = (1 << round) - 1; // 2^round - 1
-    const newResult: number[] = [];
-    for (const seed of result) {
-      newResult.push(seed);
-      newResult.push(sum - seed);
+  let bracket = [1, 2];
+  for (let r = 1; r < rounds; r++) {
+    const newBracket: number[] = [];
+    const sum = Math.pow(2, r + 1) + 1;
+    for (const seed of bracket) {
+      newBracket.push(seed);
+      newBracket.push(sum - seed);
     }
-    result = newResult;
+    bracket = newBracket;
   }
-  return result;
+
+  // Invert: seedOrder[seed - 1] = slot
+  const seedOrder = new Array(size);
+  for (let slot = 0; slot < size; slot++) {
+    seedOrder[bracket[slot] - 1] = slot;
+  }
+  return seedOrder;
 }
 
 /**
