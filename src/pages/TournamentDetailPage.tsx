@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp } from '@/data/mock';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
@@ -247,10 +247,19 @@ export default function TournamentDetailPage() {
       const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
       const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
       const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
-      if (wGk) wGk.wins++;
-      if (wFw) wFw.wins++;
-      if (lGk) lGk.losses++;
-      if (lFw) lFw.losses++;
+      if (wGk) { wGk.wins++; wGk.currentStreak = (wGk.currentStreak || 0) + 1; wGk.bestStreak = Math.max(wGk.bestStreak || 0, wGk.currentStreak); }
+      if (wFw) { wFw.wins++; wFw.currentStreak = (wFw.currentStreak || 0) + 1; wFw.bestStreak = Math.max(wFw.bestStreak || 0, wFw.currentStreak); }
+      if (lGk) { lGk.losses++; lGk.currentStreak = 0; }
+      if (lFw) { lFw.losses++; lFw.currentStreak = 0; }
+
+      // Check streak achievements
+      [winnerPair.goalkeeper.userId, winnerPair.forward.userId].forEach(uid => {
+        if (!isGuestPlayer(uid)) checkStreakAchievement(uid);
+      });
+
+      // Record pair history
+      recordPairHistory(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerPair.forward.userId, winnerPair.forward.displayName, true);
+      recordPairHistory(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserPair.forward.userId, loserPair.forward.displayName, false);
 
       setEloChanges(prev => [...prev, { matchKey, changes }]);
       toast.success('Ganador registrado. ELO actualizado.');
@@ -793,6 +802,79 @@ export default function TournamentDetailPage() {
             ) : (
               <p className="text-xs text-muted-foreground">No hay correcciones registradas.</p>
             )}
+          </div>
+        );
+      })()}
+
+      {/* === FINALIZAR TORNEO + MVP === */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        if (!isOrganizer || tournament.status === 'finalizado' || tournament.status === 'cancelado') return null;
+
+        const allPlayers = pairs.flatMap(p => [
+          { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
+          { userId: p.forward.userId, displayName: p.forward.displayName },
+        ]);
+        // Deduplicate
+        const uniquePlayers = allPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+
+        // Determine winner pair (last round winner in bracket, or top RR standing, or king court pair)
+        let winnerPairId: string | undefined;
+        if (isKingMode && kingCourtPairId) {
+          winnerPairId = kingCourtPairId;
+        } else if (isRoundRobin && rrStandings.length > 0) {
+          winnerPairId = rrStandings[0].pairId;
+        } else if (bracket.length > 0) {
+          const finalRound = bracket[bracket.length - 1];
+          if (finalRound && finalRound[0]?.winnerId) {
+            winnerPairId = finalRound[0].winnerId;
+          }
+        }
+
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
+            </h3>
+
+            {/* MVP selector */}
+            <div className="mb-3">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Jugador del torneo (MVP)</label>
+              <select
+                value={tournament.mvpPlayerId || ''}
+                onChange={e => {
+                  const player = uniquePlayers.find(p => p.userId === e.target.value);
+                  if (player) {
+                    setTournamentMvp(tournament.id, player.userId, player.displayName);
+                    forceUpdate(n => n + 1);
+                    toast.success(`${player.displayName} seleccionado como MVP (+15 ELO)`);
+                  }
+                }}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Seleccionar MVP...</option>
+                {uniquePlayers.map(p => (
+                  <option key={p.userId} value={p.userId}>{p.displayName}</option>
+                ))}
+              </select>
+              {tournament.mvpPlayerId && (
+                <p className="mt-1 text-[10px] text-success flex items-center gap-1">
+                  <Crown className="h-3 w-3" /> MVP: {tournament.mvpPlayerName} (+15 ELO)
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                finalizeTournament(tournament.id, winnerPairId);
+                forceUpdate(n => n + 1);
+                toast.success('Torneo finalizado. Estadísticas y logros actualizados.');
+              }}
+              className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98]"
+            >
+              🏆 Finalizar torneo
+            </button>
           </div>
         );
       })()}
