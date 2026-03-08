@@ -678,10 +678,12 @@ export function finalizeTournament(tournamentId: string, winnerPairId?: string) 
 
 export function getUserAchievements(userId: string): (Achievement & { unlockedAt: string })[] {
   const playerAch = getPlayerAchievements(userId);
-  return playerAch.map(pa => {
-    const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === pa.achievementId)!;
-    return { ...def, unlockedAt: pa.unlockedAt };
-  }).filter(Boolean);
+  return playerAch
+    .map(pa => {
+      const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === pa.achievementId);
+      return def ? { ...def, unlockedAt: pa.unlockedAt } : null;
+    })
+    .filter((item): item is Achievement & { unlockedAt: string } => Boolean(item));
 }
 
 // Check streak achievement
