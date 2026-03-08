@@ -382,6 +382,25 @@ export default function TournamentDetailPage() {
   const rrStandings = isRoundRobin ? calculateRoundRobinStandings(MOCK_PAIRS.filter(p => p.tournamentId === id), rrMatches) : [];
   const isTournamentLocked = tournament.status === 'finalizado' || tournament.status === 'cancelado';
   const kingFinished = isKingMode && !kingCurrentChallenger && kingHistory.length > 0;
+  const currentUser = getCurrentUser();
+  const isOrganizer = !!currentUser && tournament.organizerId === currentUser.id;
+  const allTournamentPlayers = pairs.flatMap(p => [
+    { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
+    { userId: p.forward.userId, displayName: p.forward.displayName },
+  ]);
+  const uniqueTournamentPlayers = allTournamentPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+
+  let finalWinnerPairId: string | undefined;
+  if (isKingMode && kingCourtPairId) {
+    finalWinnerPairId = kingCourtPairId;
+  } else if (isRoundRobin && rrStandings.length > 0) {
+    finalWinnerPairId = rrStandings[0].pairId;
+  } else if (bracket.length > 0) {
+    const finalRound = bracket[bracket.length - 1];
+    if (finalRound && finalRound[0]?.winnerId) finalWinnerPairId = finalRound[0].winnerId;
+  }
+
+  const canFinalizeTournament = isOrganizer && !isTournamentLocked && Boolean(finalWinnerPairId) && uniqueTournamentPlayers.length > 0;
 
   return (
     <PageShell>
