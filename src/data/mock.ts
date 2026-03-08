@@ -599,21 +599,37 @@ export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   { id: 'play_5_tables', name: 'Versátil', description: 'Jugar en 5 mesas distintas', icon: '🎯' },
 ];
 
-function getPlayerAchievements(userId: string): PlayerAchievement[] {
+function getAchievementsStore(): Record<string, PlayerAchievement[]> {
   try {
-    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
-    return all[userId] || [];
-  } catch { return []; }
+    const parsed = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAchievementsStore(store: Record<string, PlayerAchievement[]>) {
+  localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(store));
+}
+
+function getPlayerAchievements(userId: string): PlayerAchievement[] {
+  const store = getAchievementsStore();
+  const raw = Array.isArray(store[userId]) ? store[userId] : [];
+  const seen = new Set<AchievementId>();
+  return raw.filter((item): item is PlayerAchievement => {
+    if (!item || typeof item !== 'object') return false;
+    if (!item.achievementId || seen.has(item.achievementId)) return false;
+    seen.add(item.achievementId);
+    return true;
+  });
 }
 
 function savePlayerAchievement(userId: string, achievementId: AchievementId) {
-  try {
-    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
-    if (!all[userId]) all[userId] = [];
-    if (all[userId].some(a => a.achievementId === achievementId)) return;
-    all[userId].push({ achievementId, unlockedAt: new Date().toISOString() });
-    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(all));
-  } catch {}
+  const store = getAchievementsStore();
+  if (!store[userId]) store[userId] = [];
+  if (store[userId].some(a => a.achievementId === achievementId)) return;
+  store[userId].push({ achievementId, unlockedAt: new Date().toISOString() });
+  saveAchievementsStore(store);
 }
 
 export function checkAndGrantAchievement(userId: string, achievementId: AchievementId) {
