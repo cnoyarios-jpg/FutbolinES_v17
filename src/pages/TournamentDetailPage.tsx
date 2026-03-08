@@ -797,6 +797,79 @@ export default function TournamentDetailPage() {
         );
       })()}
 
+      {/* === FINALIZAR TORNEO + MVP === */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        if (!isOrganizer || tournament.status === 'finalizado' || tournament.status === 'cancelado') return null;
+
+        const allPlayers = pairs.flatMap(p => [
+          { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
+          { userId: p.forward.userId, displayName: p.forward.displayName },
+        ]);
+        // Deduplicate
+        const uniquePlayers = allPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+
+        // Determine winner pair (last round winner in bracket, or top RR standing, or king court pair)
+        let winnerPairId: string | undefined;
+        if (isKingMode && kingCourtPairId) {
+          winnerPairId = kingCourtPairId;
+        } else if (isRoundRobin && rrStandings.length > 0) {
+          winnerPairId = rrStandings[0].pairId;
+        } else if (bracket.length > 0) {
+          const finalRound = bracket[bracket.length - 1];
+          if (finalRound && finalRound[0]?.winnerId) {
+            winnerPairId = finalRound[0].winnerId;
+          }
+        }
+
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
+            </h3>
+
+            {/* MVP selector */}
+            <div className="mb-3">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Jugador del torneo (MVP)</label>
+              <select
+                value={tournament.mvpPlayerId || ''}
+                onChange={e => {
+                  const player = uniquePlayers.find(p => p.userId === e.target.value);
+                  if (player) {
+                    setTournamentMvp(tournament.id, player.userId, player.displayName);
+                    forceUpdate(n => n + 1);
+                    toast.success(`${player.displayName} seleccionado como MVP (+15 ELO)`);
+                  }
+                }}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Seleccionar MVP...</option>
+                {uniquePlayers.map(p => (
+                  <option key={p.userId} value={p.userId}>{p.displayName}</option>
+                ))}
+              </select>
+              {tournament.mvpPlayerId && (
+                <p className="mt-1 text-[10px] text-success flex items-center gap-1">
+                  <Crown className="h-3 w-3" /> MVP: {tournament.mvpPlayerName} (+15 ELO)
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                finalizeTournament(tournament.id, winnerPairId);
+                forceUpdate(n => n + 1);
+                toast.success('Torneo finalizado. Estadísticas y logros actualizados.');
+              }}
+              className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98]"
+            >
+              🏆 Finalizar torneo
+            </button>
+          </div>
+        );
+      })()}
+
 
       {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
         <button
