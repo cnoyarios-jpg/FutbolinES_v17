@@ -677,6 +677,8 @@ export function finalizeTournament(tournamentId: string, winnerPairId?: string) 
       }
     });
   });
+  persistRankings();
+  persistTournaments();
 }
 
 export function getUserAchievements(userId: string): (Achievement & { unlockedAt: string })[] {
