@@ -629,6 +629,43 @@ export function checkAndGrantAchievement(userId: string, achievementId: Achievem
   savePlayerAchievement(userId, achievementId);
 }
 
+export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpName: string) {
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (!tournament) return;
+  tournament.mvpPlayerId = mvpUserId;
+  tournament.mvpPlayerName = mvpName;
+  if (!isGuestPlayer(mvpUserId)) {
+    const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
+    if (ranking) {
+      ranking.mvpCount = (ranking.mvpCount || 0) + 1;
+      // MVP ELO bonus
+      ranking.general += 15;
+      ranking.asGoalkeeper += 10;
+      ranking.asForward += 10;
+    }
+    checkAndGrantAchievement(mvpUserId, 'mvp_tournament');
+  }
+}
+
+export function finalizeTournament(tournamentId: string, winnerPairId?: string) {
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (!tournament) return;
+  tournament.status = 'finalizado';
+  if (winnerPairId) {
+    recordTournamentWin(tournamentId, winnerPairId);
+  }
+  // Check achievements for all participants
+  const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  tPairs.forEach(p => {
+    [p.goalkeeper.userId, p.forward.userId].forEach(uid => {
+      if (!isGuestPlayer(uid)) {
+        checkStreakAchievement(uid);
+        checkVenueTableAchievements(uid);
+      }
+    });
+  });
+}
+
 export function getUserAchievements(userId: string): (Achievement & { unlockedAt: string })[] {
   const playerAch = getPlayerAchievements(userId);
   return playerAch.map(pa => {
