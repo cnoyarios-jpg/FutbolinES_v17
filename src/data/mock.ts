@@ -403,28 +403,7 @@ export function updateTeamStats(teamId: string, updates: Partial<TeamStats>) {
 // ===== MVP / JUGADOR DEL TORNEO =====
 
 export function setTournamentMVP(tournamentId: string, playerId: string, playerName: string) {
-  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
-  if (!tournament) return;
-  tournament.mvpPlayerId = playerId;
-  tournament.mvpPlayerName = playerName;
-
-  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
-  const allElos: number[] = [];
-  pairs.forEach(p => { allElos.push(p.goalkeeper.elo, p.forward.elo); });
-  const avgElo = allElos.length > 0 ? allElos.reduce((a, b) => a + b, 0) / allElos.length : 1500;
-  const bonus = Math.round(5 + Math.max(0, (avgElo - 1500)) * 0.02);
-  const cappedBonus = Math.min(bonus, 20);
-
-  const ranking = MOCK_RANKINGS.find(r => r.userId === playerId);
-  if (ranking) {
-    ranking.general += cappedBonus;
-    ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-  }
-
-  // Achievement: MVP
-  checkAndGrantAchievement(playerId, 'mvp_tournament');
-  persistRankings();
-  persistTournaments();
+  setTournamentMvp(tournamentId, playerId, playerName);
 }
 
 export function getTournamentMVPBonus(tournamentId: string): number {
@@ -620,21 +599,37 @@ export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   { id: 'play_5_tables', name: 'Versátil', description: 'Jugar en 5 mesas distintas', icon: '🎯' },
 ];
 
-function getPlayerAchievements(userId: string): PlayerAchievement[] {
+function getAchievementsStore(): Record<string, PlayerAchievement[]> {
   try {
-    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
-    return all[userId] || [];
-  } catch { return []; }
+    const parsed = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAchievementsStore(store: Record<string, PlayerAchievement[]>) {
+  localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(store));
+}
+
+function getPlayerAchievements(userId: string): PlayerAchievement[] {
+  const store = getAchievementsStore();
+  const raw = Array.isArray(store[userId]) ? store[userId] : [];
+  const seen = new Set<AchievementId>();
+  return raw.filter((item): item is PlayerAchievement => {
+    if (!item || typeof item !== 'object') return false;
+    if (!item.achievementId || seen.has(item.achievementId)) return false;
+    seen.add(item.achievementId);
+    return true;
+  });
 }
 
 function savePlayerAchievement(userId: string, achievementId: AchievementId) {
-  try {
-    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
-    if (!all[userId]) all[userId] = [];
-    if (all[userId].some(a => a.achievementId === achievementId)) return;
-    all[userId].push({ achievementId, unlockedAt: new Date().toISOString() });
-    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(all));
-  } catch {}
+  const store = getAchievementsStore();
+  if (!store[userId]) store[userId] = [];
+  if (store[userId].some(a => a.achievementId === achievementId)) return;
+  store[userId].push({ achievementId, unlockedAt: new Date().toISOString() });
+  saveAchievementsStore(store);
 }
 
 export function checkAndGrantAchievement(userId: string, achievementId: AchievementId) {
@@ -683,10 +678,12 @@ export function finalizeTournament(tournamentId: string, winnerPairId?: string) 
 
 export function getUserAchievements(userId: string): (Achievement & { unlockedAt: string })[] {
   const playerAch = getPlayerAchievements(userId);
-  return playerAch.map(pa => {
-    const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === pa.achievementId)!;
-    return { ...def, unlockedAt: pa.unlockedAt };
-  }).filter(Boolean);
+  return playerAch
+    .map(pa => {
+      const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === pa.achievementId);
+      return def ? { ...def, unlockedAt: pa.unlockedAt } : null;
+    })
+    .filter((item): item is Achievement & { unlockedAt: string } => Boolean(item));
 }
 
 // Check streak achievement

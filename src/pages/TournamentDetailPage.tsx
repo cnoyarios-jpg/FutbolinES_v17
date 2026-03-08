@@ -88,6 +88,8 @@ export default function TournamentDetailPage() {
 
   const [eloChanges, setEloChanges] = useState<EloChangeDisplay[]>([]);
   const [, forceUpdate] = useState(0);
+  const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
+  const [selectedMvpId, setSelectedMvpId] = useState('');
 
   // === ENROLLMENT ===
   const [showEnrollDialog, setShowEnrollDialog] = useState(false);
@@ -213,6 +215,7 @@ export default function TournamentDetailPage() {
 
   // === ELO UPDATE HELPER ===
   const applyEloChanges = useCallback((winnerId: string, loserId: string, matchKey: string) => {
+    if (!tournament || tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
     const winnerPair = allPairs.find(p => p.id === winnerId);
     const loserPair = allPairs.find(p => p.id === loserId);
@@ -270,6 +273,7 @@ export default function TournamentDetailPage() {
 
   // === BRACKET: Select winner (elimination) ===
   const handleSelectWinner = useCallback((roundIdx: number, matchIdx: number, winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     setBracket(prev => {
       const newBracket = prev.map(r => r.map(m => ({ ...m })));
       const match = newBracket[roundIdx][matchIdx];
@@ -298,6 +302,7 @@ export default function TournamentDetailPage() {
 
   // === ROUND ROBIN: Select winner ===
   const handleRRSelectWinner = useCallback((matchId: string, winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     setRrMatches(prev => {
       const updated = prev.map(m => {
         if (m.id === matchId && !m.played) {
@@ -319,6 +324,7 @@ export default function TournamentDetailPage() {
 
   // === REY DE LA MESA: Select winner ===
   const handleKingSelectWinner = useCallback((winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     if (!kingCourtPairId || !kingCurrentChallenger) return;
 
     const loserId = winnerId === kingCourtPairId ? kingCurrentChallenger : kingCourtPairId;
@@ -374,7 +380,27 @@ export default function TournamentDetailPage() {
   };
 
   const rrStandings = isRoundRobin ? calculateRoundRobinStandings(MOCK_PAIRS.filter(p => p.tournamentId === id), rrMatches) : [];
+  const isTournamentLocked = tournament.status === 'finalizado' || tournament.status === 'cancelado';
   const kingFinished = isKingMode && !kingCurrentChallenger && kingHistory.length > 0;
+  const currentUser = getCurrentUser();
+  const isOrganizer = !!currentUser && tournament.organizerId === currentUser.id;
+  const allTournamentPlayers = pairs.flatMap(p => [
+    { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
+    { userId: p.forward.userId, displayName: p.forward.displayName },
+  ]);
+  const uniqueTournamentPlayers = allTournamentPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+
+  let finalWinnerPairId: string | undefined;
+  if (isKingMode && kingCourtPairId) {
+    finalWinnerPairId = kingCourtPairId;
+  } else if (isRoundRobin && rrStandings.length > 0) {
+    finalWinnerPairId = rrStandings[0].pairId;
+  } else if (bracket.length > 0) {
+    const finalRound = bracket[bracket.length - 1];
+    if (finalRound && finalRound[0]?.winnerId) finalWinnerPairId = finalRound[0].winnerId;
+  }
+
+  const canFinalizeTournament = isOrganizer && !isTournamentLocked && Boolean(finalWinnerPairId) && uniqueTournamentPlayers.length > 0;
 
   return (
     <PageShell>
@@ -698,7 +724,7 @@ export default function TournamentDetailPage() {
           </h3>
           <div className="flex flex-col gap-2">
             {rrMatches.map(match => {
-              const canSelect = !match.played;
+              const canSelect = !isTournamentLocked && !match.played;
               return (
                 <div key={match.id} className={`rounded-lg border p-3 text-xs ${match.played ? 'border-border bg-muted/30' : 'border-border bg-card'}`}>
                   <div
@@ -742,6 +768,7 @@ export default function TournamentDetailPage() {
               pairs={MOCK_PAIRS.filter(p => p.tournamentId === id)}
               onSelectWinner={handleSelectWinner}
               eloChanges={eloChanges}
+              locked={isTournamentLocked}
             />
           </div>
         </div>
@@ -809,77 +836,31 @@ export default function TournamentDetailPage() {
       })()}
 
       {/* === FINALIZAR TORNEO + MVP === */}
-      {(() => {
-        const currentUser = getCurrentUser();
-        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
-        if (!isOrganizer || tournament.status === 'finalizado' || tournament.status === 'cancelado') return null;
+      {isOrganizer && !isTournamentLocked && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+            <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
+          </h3>
 
-        const allPlayers = pairs.flatMap(p => [
-          { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
-          { userId: p.forward.userId, displayName: p.forward.displayName },
-        ]);
-        // Deduplicate
-        const uniquePlayers = allPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+          <p className="text-xs text-muted-foreground mb-3">
+            {canFinalizeTournament
+              ? 'Selecciona MVP y cierra el torneo. Al cerrar se guardan ganador, MVP y estadísticas.'
+              : 'Aún no se puede finalizar: primero debe quedar definida la pareja ganadora.'}
+          </p>
 
-        // Determine winner pair (last round winner in bracket, or top RR standing, or king court pair)
-        let winnerPairId: string | undefined;
-        if (isKingMode && kingCourtPairId) {
-          winnerPairId = kingCourtPairId;
-        } else if (isRoundRobin && rrStandings.length > 0) {
-          winnerPairId = rrStandings[0].pairId;
-        } else if (bracket.length > 0) {
-          const finalRound = bracket[bracket.length - 1];
-          if (finalRound && finalRound[0]?.winnerId) {
-            winnerPairId = finalRound[0].winnerId;
-          }
-        }
-
-        return (
-          <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
-            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
-              <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
-            </h3>
-
-            {/* MVP selector */}
-            <div className="mb-3">
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Jugador del torneo (MVP)</label>
-              <select
-                value={tournament.mvpPlayerId || ''}
-                onChange={e => {
-                  const player = uniquePlayers.find(p => p.userId === e.target.value);
-                  if (player) {
-                    setTournamentMvp(tournament.id, player.userId, player.displayName);
-                    forceUpdate(n => n + 1);
-                    toast.success(`${player.displayName} seleccionado como MVP (+15 ELO)`);
-                  }
-                }}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Seleccionar MVP...</option>
-                {uniquePlayers.map(p => (
-                  <option key={p.userId} value={p.userId}>{p.displayName}</option>
-                ))}
-              </select>
-              {tournament.mvpPlayerId && (
-                <p className="mt-1 text-[10px] text-success flex items-center gap-1">
-                  <Crown className="h-3 w-3" /> MVP: {tournament.mvpPlayerName} (+15 ELO)
-                </p>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                finalizeTournament(tournament.id, winnerPairId);
-                forceUpdate(n => n + 1);
-                toast.success('Torneo finalizado. Estadísticas y logros actualizados.');
-              }}
-              className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98]"
-            >
-              🏆 Finalizar torneo
-            </button>
-          </div>
-        );
-      })()}
+          <button
+            onClick={() => {
+              if (!canFinalizeTournament) return;
+              setSelectedMvpId(tournament.mvpPlayerId || uniqueTournamentPlayers[0]?.userId || '');
+              setShowFinalizeDialog(true);
+            }}
+            disabled={!canFinalizeTournament}
+            className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            🏆 Finalizar torneo
+          </button>
+        </div>
+      )}
 
 
       {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
@@ -889,6 +870,55 @@ export default function TournamentDetailPage() {
         >
           Inscribir pareja
         </button>
+      )}
+
+      {showFinalizeDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-xl bg-card p-5 shadow-elevated">
+            <h3 className="font-display text-lg font-bold mb-3">Finalizar torneo</h3>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Jugador del torneo (MVP)</label>
+            <select
+              value={selectedMvpId}
+              onChange={e => setSelectedMvpId(e.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Seleccionar MVP...</option>
+              {uniqueTournamentPlayers.map(player => (
+                <option key={player.userId} value={player.userId}>{player.displayName}</option>
+              ))}
+            </select>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setShowFinalizeDialog(false)}
+                className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!finalWinnerPairId) {
+                    toast.error('No hay pareja ganadora definida para finalizar.');
+                    return;
+                  }
+                  const mvpPlayer = uniqueTournamentPlayers.find(p => p.userId === selectedMvpId);
+                  if (!mvpPlayer) {
+                    toast.error('Selecciona un MVP para finalizar.');
+                    return;
+                  }
+                  setTournamentMvp(tournament.id, mvpPlayer.userId, mvpPlayer.displayName);
+                  finalizeTournament(tournament.id, finalWinnerPairId);
+                  setShowFinalizeDialog(false);
+                  forceUpdate(n => n + 1);
+                  toast.success('Torneo finalizado y MVP guardado correctamente.');
+                }}
+                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-foreground"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ENROLLMENT DIALOG */}
@@ -1126,11 +1156,13 @@ function BracketView({
   pairs,
   onSelectWinner,
   eloChanges,
+  locked,
 }: {
   rounds: BracketMatch[][];
   pairs: TournamentPair[];
   onSelectWinner: (roundIdx: number, matchIdx: number, winnerId: string) => void;
   eloChanges: EloChangeDisplay[];
+  locked: boolean;
 }) {
   const getPairName = (pairId?: string) => {
     if (!pairId) return '—';
@@ -1147,7 +1179,7 @@ function BracketView({
             {ri === rounds.length - 1 ? 'Final' : `Ronda ${ri + 1}`}
           </p>
           {round.map((match, mi) => {
-            const canSelect = !match.winnerId && !match.isBye && match.pair1Id && match.pair2Id;
+            const canSelect = !locked && !match.winnerId && !match.isBye && Boolean(match.pair1Id) && Boolean(match.pair2Id);
 
             return (
               <div key={match.position} className={`rounded-lg border p-2 text-xs ${match.isBye ? 'border-dashed border-muted bg-muted/30' : 'border-border bg-card'}`}>

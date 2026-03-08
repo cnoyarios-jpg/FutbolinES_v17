@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { TableBrand, PlayStyle, TournamentFormat, PairingMode, Tournament } from '@/types';
-import { MOCK_TOURNAMENTS, MOCK_USER } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_USER, getCurrentUser, persistTournaments } from '@/data/mock';
 import { toast } from 'sonner';
 
 const STEPS = ['Información', 'Formato', 'Estilo', 'Localización', 'Inscripción', 'Categorías', 'Premios', 'Vista previa'];
@@ -36,6 +36,7 @@ export default function CreateTournamentPage() {
 
   const handleCreateTournament = () => {
     if (!form.name.trim()) { toast.error('El nombre del torneo es obligatorio'); return; }
+    const organizer = getCurrentUser() || MOCK_USER;
     const newId = `to_${Date.now()}`;
     const newTournament: Tournament = {
       id: newId, name: form.name, description: form.description,
@@ -44,12 +45,13 @@ export default function CreateTournamentPage() {
       tableBrand: form.tableBrand, playStyle: form.playStyle, format: form.format,
       pairingMode: form.pairingMode, maxPairs: form.maxPairs, hasWaitlist: form.hasWaitlist,
       entryFee: form.entryFee ? parseInt(form.entryFee) : undefined, prizes: form.prizes || undefined,
-      organizerId: MOCK_USER.id, organizerName: MOCK_USER.displayName, requiresApproval: form.requiresApproval,
+      organizerId: organizer.id, organizerName: organizer.displayName, requiresApproval: form.requiresApproval,
       status: 'abierto', hasCategories: form.hasCategories,
       categories: form.hasCategories ? form.categories.filter(c => c.trim()).map((c, i) => ({ id: `cat_${newId}_${i}`, tournamentId: newId, name: c })) : [],
       createdAt: new Date().toISOString().split('T')[0],
     };
     MOCK_TOURNAMENTS.push(newTournament);
+    persistTournaments();
     toast.success('¡Torneo creado correctamente!');
     navigate(`/torneos/${newId}`);
   };
