@@ -762,7 +762,42 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
-      {/* CTA */}
+      {/* Result Corrections */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        const corrections = getCorrections(tournament.id);
+        if (!isOrganizer && corrections.length === 0) return null;
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <RotateCcw className="h-4 w-4" /> Correcciones de resultados
+            </h3>
+            {isOrganizer && eloChanges.length > 0 && (
+              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> Puedes revertir resultados seleccionando un nuevo ganador en el bracket o partidos.
+              </p>
+            )}
+            {corrections.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {corrections.map((c, i) => (
+                  <div key={i} className="rounded-lg bg-muted p-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Partido {c.matchKey}</span>
+                      <span className="text-muted-foreground">{new Date(c.date).toLocaleDateString('es-ES')}</span>
+                    </div>
+                    {c.reason && <p className="text-muted-foreground mt-0.5">{c.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No hay correcciones registradas.</p>
+            )}
+          </div>
+        );
+      })()}
+
+
       {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
         <button
           onClick={() => setShowEnrollDialog(true)}
