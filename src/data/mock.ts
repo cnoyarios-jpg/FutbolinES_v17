@@ -283,6 +283,8 @@ export function openCheckIn(tournamentId: string) {
       if (!p.checkInStatus) p.checkInStatus = 'pendiente';
     });
   }
+  persistTournaments();
+  persistPairs();
 }
 
 export function closeCheckIn(tournamentId: string) {
