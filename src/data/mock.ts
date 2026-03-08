@@ -1,61 +1,525 @@
-import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TournamentPair, Position } from '@/types';
+import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType } from '@/types';
+
+// ===== AUTH STORE =====
+export interface RegisteredUser {
+  id: string;
+  nickname: string;
+  displayName: string;
+  email: string;
+  password: string;
+  city: string;
+  postalCode?: string;
+  preferredPosition: Position;
+  preferredStyle: 'parado' | 'movimiento';
+  preferredTable?: TableBrand;
+  playerType: PlayerType;
+  createdAt: string;
+}
+
+const REGISTERED_USERS_KEY = 'futbolines_users';
+const CURRENT_USER_KEY = 'futbolines_current_user';
+const VERIFICATIONS_KEY = 'futbolines_verifications';
+const TEAMS_STORAGE_KEY = 'futbolines_teams';
+const TEAM_MEMBERS_KEY = 'futbolines_team_members';
+const NOTIFICATIONS_KEY = 'futbolines_notifications';
+const PAIR_HISTORY_KEY = 'futbolines_pair_history';
+const GUEST_PLAYERS_KEY = 'futbolines_guests';
+
+export function getRegisteredUsers(): RegisteredUser[] {
+  try {
+    return JSON.parse(localStorage.getItem(REGISTERED_USERS_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveRegisteredUsers(users: RegisteredUser[]) {
+  localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(users));
+}
+
+export function isNicknameAvailable(nickname: string): boolean {
+  const users = getRegisteredUsers();
+  return !users.some(u => u.nickname.toLowerCase() === nickname.toLowerCase());
+}
+
+export function isDisplayNameAvailable(displayName: string): boolean {
+  const users = getRegisteredUsers();
+  const inRegistered = users.some(u => u.displayName.toLowerCase() === displayName.toLowerCase());
+  const inRankings = MOCK_RANKINGS.some(r => r.displayName.toLowerCase() === displayName.toLowerCase());
+  return !inRegistered && !inRankings;
+}
+
+export function registerUser(data: Omit<RegisteredUser, 'id' | 'createdAt' | 'playerType'>): { success: boolean; error?: string; user?: RegisteredUser } {
+  if (!isNicknameAvailable(data.nickname)) {
+    return { success: false, error: 'Este nickname ya está en uso. Elige otro.' };
+  }
+  if (!isDisplayNameAvailable(data.displayName)) {
+    return { success: false, error: 'Este nombre completo ya está registrado. Usa otro.' };
+  }
+  const users = getRegisteredUsers();
+  if (users.some(u => u.email.toLowerCase() === data.email.toLowerCase())) {
+    return { success: false, error: 'Este email ya está registrado.' };
+  }
+  const newUser: RegisteredUser = {
+    ...data,
+    id: `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    playerType: 'registrado',
+    createdAt: new Date().toISOString().split('T')[0],
+  };
+  users.push(newUser);
+  saveRegisteredUsers(users);
+  setCurrentUser(newUser);
+  // Auto-add to ranking
+  ensureRankingEntry(newUser.id, newUser.displayName, newUser.city, newUser.postalCode, newUser.preferredPosition, newUser.preferredStyle, newUser.preferredTable);
+  return { success: true, user: newUser };
+}
+
+/** Ensures a player has a ranking entry. Creates one with ELO 1500 if missing. */
+export function ensureRankingEntry(
+  userId: string,
+  displayName: string,
+  city?: string,
+  postalCode?: string,
+  preferredPosition?: Position,
+  preferredStyle?: 'parado' | 'movimiento',
+  preferredTable?: TableBrand
+) {
+  const existing = MOCK_RANKINGS.find(r => r.userId === userId);
+  if (!existing) {
+    MOCK_RANKINGS.push({
+      userId,
+      displayName,
+      city: city || '',
+      postalCode,
+      general: 1500,
+      asGoalkeeper: 1500,
+      asForward: 1500,
+      byTable: {},
+      byStyle: { parado: 1500, movimiento: 1500 },
+      wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
+      mvpCount: 0, currentStreak: 0, bestStreak: 0,
+      preferredPosition,
+      preferredStyle,
+      preferredTable,
+      playerType: 'registrado',
+    });
+  }
+}
+
+export function loginUser(email: string, password: string): { success: boolean; error?: string; user?: RegisteredUser } {
+  const users = getRegisteredUsers();
+  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+  if (!user) return { success: false, error: 'Email o contraseña incorrectos.' };
+  setCurrentUser(user);
+  // Ensure ranking entry exists on login
+  ensureRankingEntry(user.id, user.displayName, user.city, user.postalCode, user.preferredPosition, user.preferredStyle, user.preferredTable);
+  return { success: true, user };
+}
+
+export function setCurrentUser(user: RegisteredUser | null) {
+  if (user) localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+  else localStorage.removeItem(CURRENT_USER_KEY);
+}
+
+export function getCurrentUser(): RegisteredUser | null {
+  try {
+    const raw = localStorage.getItem(CURRENT_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export function logoutUser() {
+  localStorage.removeItem(CURRENT_USER_KEY);
+}
+
+export function updateUserPreferences(updates: { preferredPosition?: Position; preferredStyle?: 'parado' | 'movimiento'; preferredTable?: TableBrand }) {
+  const current = getCurrentUser();
+  if (!current) return;
+  const updated = { ...current, ...updates };
+  setCurrentUser(updated);
+  const users = getRegisteredUsers();
+  const idx = users.findIndex(u => u.id === current.id);
+  if (idx >= 0) {
+    users[idx] = { ...users[idx], ...updates };
+    saveRegisteredUsers(users);
+  }
+  const ranking = MOCK_RANKINGS.find(r => r.userId === current.id);
+  if (ranking) {
+    if (updates.preferredPosition) ranking.preferredPosition = updates.preferredPosition;
+    if (updates.preferredStyle) ranking.preferredStyle = updates.preferredStyle;
+    if (updates.preferredTable) ranking.preferredTable = updates.preferredTable;
+  }
+}
+
+// ===== GUEST PLAYERS =====
+
+export interface GuestPlayer {
+  id: string;
+  displayName: string;
+  postalCode?: string;
+  playerType: 'invitado';
+  createdAt: string;
+}
+
+export function getGuestPlayers(): GuestPlayer[] {
+  try { return JSON.parse(localStorage.getItem(GUEST_PLAYERS_KEY) || '[]'); } catch { return []; }
+}
+
+function saveGuestPlayers(guests: GuestPlayer[]) {
+  localStorage.setItem(GUEST_PLAYERS_KEY, JSON.stringify(guests));
+}
+
+export function createGuestPlayer(displayName: string, postalCode?: string): GuestPlayer {
+  const guests = getGuestPlayers();
+  // Check if guest already exists
+  const existing = guests.find(g => g.displayName.toLowerCase() === displayName.toLowerCase());
+  if (existing) return existing;
+
+  const guest: GuestPlayer = {
+    id: `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    displayName,
+    postalCode,
+    playerType: 'invitado',
+    createdAt: new Date().toISOString().split('T')[0],
+  };
+  guests.push(guest);
+  saveGuestPlayers(guests);
+  return guest;
+}
+
+export function isGuestPlayer(userId: string): boolean {
+  return userId.startsWith('guest_');
+}
+
+// ===== VERIFICATIONS =====
+
+export function getVenueVerifications(venueId: string): Verification[] {
+  try {
+    const all: Verification[] = JSON.parse(localStorage.getItem(VERIFICATIONS_KEY) || '[]');
+    return all.filter(v => v.venueId === venueId);
+  } catch { return []; }
+}
+
+function canUserVerifyVenue(userId: string, venueId: string): boolean {
+  const verifications = getVenueVerifications(venueId);
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return !verifications.some(v => v.userId === userId && new Date(v.createdAt).getTime() > oneWeekAgo);
+}
+
+export function verifyVenue(venueId: string, type: VerificationType = 'confirm', comment?: string): { success: boolean; error?: string; verification?: Verification } {
+  const user = getCurrentUser();
+  if (!user) return { success: false, error: 'Debes iniciar sesión' };
+
+  if (!canUserVerifyVenue(user.id, venueId)) {
+    return { success: false, error: 'Solo puedes verificar un mismo local una vez por semana' };
+  }
+
+  const all: Verification[] = JSON.parse(localStorage.getItem(VERIFICATIONS_KEY) || '[]');
+  const newVerification: Verification = {
+    id: `ver_${Date.now()}`,
+    venueId,
+    userId: user.id,
+    userName: user.displayName,
+    type,
+    comment,
+    createdAt: new Date().toISOString(),
+  };
+  all.push(newVerification);
+  localStorage.setItem(VERIFICATIONS_KEY, JSON.stringify(all));
+
+  const venue = MOCK_VENUES.find(v => v.id === venueId);
+  if (venue) {
+    if (type === 'confirm') {
+      venue.verificationCount = (venue.verificationCount || 0) + 1;
+      venue.lastVerified = new Date().toISOString().split('T')[0];
+      if (venue.verificationCount >= 3) venue.verificationLevel = 'verificado';
+    } else if (type === 'report_worse') {
+      const table = MOCK_TABLES.find(t => t.venueId === venueId);
+      if (table) {
+        const conditions: TableCondition[] = ['perfecta', 'buen_estado', 'estado_normal', 'deteriorada', 'fuera_de_servicio'];
+        const idx = conditions.indexOf(table.condition);
+        if (idx < conditions.length - 1) table.condition = conditions[idx + 1];
+      }
+      venue.verificationLevel = 'en_disputa';
+    } else if (type === 'report_closed') {
+      venue.status = 'cerrado';
+    }
+  }
+  return { success: true, verification: newVerification };
+}
+
+// ===== NOTIFICATIONS =====
+
+export function getNotifications(userId: string): AppNotification[] {
+  try {
+    const all: AppNotification[] = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+    return all.filter(n => n.userId === userId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch { return []; }
+}
+
+export function addNotification(notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) {
+  try {
+    const all: AppNotification[] = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+    all.push({ ...notification, id: `notif_${Date.now()}_${Math.random().toString(36).slice(2,5)}`, read: false, createdAt: new Date().toISOString() });
+    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function markNotificationRead(notifId: string) {
+  try {
+    const all: AppNotification[] = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
+    const n = all.find(x => x.id === notifId);
+    if (n) n.read = true;
+    localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+// ===== PAIR CONFIRMATION =====
+
+export function confirmPairMembership(pairId: string, userId: string, accept: boolean) {
+  const pair = MOCK_PAIRS.find(p => p.id === pairId);
+  if (!pair) return;
+  if (pair.goalkeeper.userId === userId) {
+    pair.goalkeeperConfirmed = accept ? 'aceptada' : 'rechazada';
+  }
+  if (pair.forward.userId === userId) {
+    pair.forwardConfirmed = accept ? 'aceptada' : 'rechazada';
+  }
+  if (pair.goalkeeperConfirmed === 'aceptada' && pair.forwardConfirmed === 'aceptada') {
+    pair.status = 'confirmada';
+  }
+}
+
+// ===== CHECK-IN =====
+
+export function openCheckIn(tournamentId: string) {
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (tournament) tournament.checkInOpen = true;
+}
+
+export function pairCheckIn(pairId: string) {
+  const pair = MOCK_PAIRS.find(p => p.id === pairId);
+  if (pair) pair.checkInStatus = 'confirmado';
+}
+
+export function markPairAbsent(pairId: string) {
+  const pair = MOCK_PAIRS.find(p => p.id === pairId);
+  if (pair) pair.checkInStatus = 'ausente';
+}
+
+// ===== TEAMS STORAGE =====
+
+export function getStoredTeams(): Team[] {
+  try {
+    return JSON.parse(localStorage.getItem(TEAMS_STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
+export function saveTeam(team: Team) {
+  const teams = getStoredTeams();
+  teams.push(team);
+  localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams));
+  MOCK_TEAMS.push(team);
+}
+
+export function getTeamMembers(teamId: string): TeamMember[] {
+  try {
+    const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+    return all.filter(m => m.teamId === teamId);
+  } catch { return []; }
+}
+
+export function addTeamMember(member: TeamMember) {
+  try {
+    const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+    all.push(member);
+    localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+// ===== MVP / JUGADOR DEL TORNEO =====
+
+export function setTournamentMVP(tournamentId: string, playerId: string, playerName: string) {
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (!tournament) return;
+  tournament.mvpPlayerId = playerId;
+  tournament.mvpPlayerName = playerName;
+
+  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const allElos: number[] = [];
+  pairs.forEach(p => { allElos.push(p.goalkeeper.elo, p.forward.elo); });
+  const avgElo = allElos.length > 0 ? allElos.reduce((a, b) => a + b, 0) / allElos.length : 1500;
+  const bonus = Math.round(5 + Math.max(0, (avgElo - 1500)) * 0.02);
+  const cappedBonus = Math.min(bonus, 20);
+
+  const ranking = MOCK_RANKINGS.find(r => r.userId === playerId);
+  if (ranking) {
+    ranking.general += cappedBonus;
+    ranking.mvpCount = (ranking.mvpCount || 0) + 1;
+  }
+}
+
+export function getTournamentMVPBonus(tournamentId: string): number {
+  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const allElos: number[] = [];
+  pairs.forEach(p => { allElos.push(p.goalkeeper.elo, p.forward.elo); });
+  const avgElo = allElos.length > 0 ? allElos.reduce((a, b) => a + b, 0) / allElos.length : 1500;
+  return Math.min(Math.round(5 + Math.max(0, (avgElo - 1500)) * 0.02), 20);
+}
+
+// ===== TOURNAMENT WIN TRACKING =====
+
+export function recordTournamentWin(tournamentId: string, winnerPairId: string) {
+  const pair = MOCK_PAIRS.find(p => p.id === winnerPairId);
+  if (!pair) return;
+
+  [pair.goalkeeper.userId, pair.forward.userId].forEach(userId => {
+    if (!isGuestPlayer(userId)) {
+      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+      if (ranking) {
+        ranking.tournamentsWon = (ranking.tournamentsWon || 0) + 1;
+        ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
+      }
+    }
+  });
+
+  const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId && p.id !== winnerPairId);
+  allPairs.forEach(p => {
+    [p.goalkeeper.userId, p.forward.userId].forEach(userId => {
+      if (!isGuestPlayer(userId)) {
+        const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+        if (ranking) {
+          ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
+        }
+      }
+    });
+  });
+
+  recordPairHistory(pair.goalkeeper.userId, pair.goalkeeper.displayName, pair.forward.userId, pair.forward.displayName, true);
+}
+
+// ===== PAIR HISTORY =====
+
+interface PairHistoryEntry {
+  goalkeeperId: string;
+  goalkeeperName: string;
+  forwardId: string;
+  forwardName: string;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  tournamentsWon: number;
+}
+
+function getPairHistoryStore(): PairHistoryEntry[] {
+  try { return JSON.parse(localStorage.getItem(PAIR_HISTORY_KEY) || '[]'); } catch { return []; }
+}
+
+function savePairHistoryStore(entries: PairHistoryEntry[]) {
+  localStorage.setItem(PAIR_HISTORY_KEY, JSON.stringify(entries));
+}
+
+export function recordPairHistory(gkId: string, gkName: string, fwId: string, fwName: string, won: boolean) {
+  const store = getPairHistoryStore();
+  let entry = store.find(e => (e.goalkeeperId === gkId && e.forwardId === fwId) || (e.goalkeeperId === fwId && e.forwardId === gkId));
+  if (!entry) {
+    entry = { goalkeeperId: gkId, goalkeeperName: gkName, forwardId: fwId, forwardName: fwName, matchesPlayed: 0, wins: 0, losses: 0, tournamentsWon: 0 };
+    store.push(entry);
+  }
+  entry.matchesPlayed++;
+  if (won) entry.wins++; else entry.losses++;
+  if (won) entry.tournamentsWon++;
+  savePairHistoryStore(store);
+}
+
+export function getPairHistory(userId: string): PairHistoryEntry[] {
+  const store = getPairHistoryStore();
+  return store.filter(e => e.goalkeeperId === userId || e.forwardId === userId);
+}
+
+// ===== VENUE STATS =====
+
+export function getVenueTopPlayers(venueId: string, limit: number = 3): { userId: string; displayName: string; elo: number }[] {
+  const venueTournaments = MOCK_TOURNAMENTS.filter(t => t.venueId === venueId);
+  const playerElos: Record<string, { displayName: string; elo: number }> = {};
+
+  venueTournaments.forEach(t => {
+    const pairs = MOCK_PAIRS.filter(p => p.tournamentId === t.id);
+    pairs.forEach(p => {
+      [p.goalkeeper, p.forward].forEach(member => {
+        if (!isGuestPlayer(member.userId)) {
+          const ranking = MOCK_RANKINGS.find(r => r.userId === member.userId);
+          if (ranking && (!playerElos[member.userId] || ranking.general > playerElos[member.userId].elo)) {
+            playerElos[member.userId] = { displayName: member.displayName, elo: ranking.general };
+          }
+        }
+      });
+    });
+  });
+
+  return Object.entries(playerElos)
+    .map(([userId, data]) => ({ userId, ...data }))
+    .sort((a, b) => b.elo - a.elo)
+    .slice(0, limit);
+}
+
+export function getVenueAvgLevel(venueId: string): number {
+  const venueTournaments = MOCK_TOURNAMENTS.filter(t => t.venueId === venueId);
+  const allElos: number[] = [];
+  venueTournaments.forEach(t => {
+    const pairs = MOCK_PAIRS.filter(p => p.tournamentId === t.id);
+    pairs.forEach(p => {
+      if (!isGuestPlayer(p.goalkeeper.userId)) {
+        const gkR = MOCK_RANKINGS.find(r => r.userId === p.goalkeeper.userId);
+        if (gkR) allElos.push(gkR.general);
+      }
+      if (!isGuestPlayer(p.forward.userId)) {
+        const fwR = MOCK_RANKINGS.find(r => r.userId === p.forward.userId);
+        if (fwR) allElos.push(fwR.general);
+      }
+    });
+  });
+  return allElos.length > 0 ? Math.round(allElos.reduce((a, b) => a + b, 0) / allElos.length) : 0;
+}
+
+export function getVenueMostCommonStyle(venueId: string): string | null {
+  const venueTournaments = MOCK_TOURNAMENTS.filter(t => t.venueId === venueId);
+  let parado = 0, movimiento = 0;
+  venueTournaments.forEach(t => { if (t.playStyle === 'parado') parado++; else movimiento++; });
+  if (parado === 0 && movimiento === 0) return null;
+  return parado >= movimiento ? 'Parado' : 'Movimiento';
+}
+
+// ===== MOCK DATA =====
 
 export const MOCK_USER: User = {
   id: 'u1',
   email: 'carlos@ejemplo.com',
+  nickname: 'CarlosGK',
   displayName: 'Carlos García',
   city: 'Madrid',
+  postalCode: '28001',
   preferredPosition: 'portero',
   preferredStyle: 'parado',
+  preferredTable: 'Presas',
+  playerType: 'registrado',
   createdAt: '2024-01-15',
 };
 
 export const MOCK_VENUES: Venue[] = [
-  {
-    id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid',
-    lat: 40.4200, lng: -3.7025, photos: [], status: 'activo',
-    verificationLevel: 'verificado', confidenceScore: 92, lastVerified: '2026-02-20',
-    createdBy: 'u1', createdAt: '2024-06-01',
-  },
-  {
-    id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 310', city: 'Barcelona',
-    lat: 41.3925, lng: 2.1630, photos: [], status: 'activo',
-    verificationLevel: 'verificado', confidenceScore: 85, lastVerified: '2026-01-10',
-    createdBy: 'u2', createdAt: '2024-07-15',
-  },
-  {
-    id: 'v3', name: 'La Taberna del Gol', address: 'C/ Sierpes 18', city: 'Sevilla',
-    lat: 37.3886, lng: -5.9953, photos: [], status: 'activo',
-    verificationLevel: 'no_verificado', confidenceScore: 60, lastVerified: '2025-08-01',
-    createdBy: 'u3', createdAt: '2024-03-20',
-  },
-  {
-    id: 'v4', name: 'Txoko Futbolín', address: 'C/ Ledesma 12', city: 'Bilbao',
-    lat: 43.2630, lng: -2.9350, photos: [], status: 'activo',
-    verificationLevel: 'verificado', confidenceScore: 95, lastVerified: '2026-03-01',
-    createdBy: 'u1', createdAt: '2024-09-01',
-  },
-  {
-    id: 'v5', name: 'Bar La Esquina', address: 'C/ Colón 22', city: 'Valencia',
-    lat: 39.4702, lng: -0.3768, photos: [], status: 'pendiente',
-    verificationLevel: 'en_disputa', confidenceScore: 40, lastVerified: '2025-06-15',
-    createdBy: 'u2', createdAt: '2024-11-01',
-  },
-  {
-    id: 'v6', name: 'Cervecería Gol Norte', address: 'C/ Princesa 8', city: 'Madrid',
-    lat: 40.4280, lng: -3.7140, photos: [], status: 'activo',
-    verificationLevel: 'verificado', confidenceScore: 88, lastVerified: '2026-02-28',
-    createdBy: 'u3', createdAt: '2025-01-10',
-  },
+  { id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 92, lastVerified: '2026-02-20', verificationCount: 5, createdBy: 'u1', createdAt: '2024-06-01' },
+  { id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 310', city: 'Barcelona', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 85, lastVerified: '2026-01-10', verificationCount: 3, createdBy: 'u2', createdAt: '2024-07-15' },
+  { id: 'v3', name: 'La Taberna del Gol', address: 'C/ Sierpes 18', city: 'Sevilla', photos: [], status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 60, lastVerified: '2025-08-01', verificationCount: 0, createdBy: 'u3', createdAt: '2024-03-20' },
+  { id: 'v4', name: 'Txoko Futbolín', address: 'C/ Ledesma 12', city: 'Bilbao', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 95, lastVerified: '2026-03-01', verificationCount: 7, createdBy: 'u1', createdAt: '2024-09-01' },
+  { id: 'v5', name: 'Bar La Esquina', address: 'C/ Colón 22', city: 'Valencia', photos: [], status: 'pendiente', verificationLevel: 'en_disputa', confidenceScore: 40, lastVerified: '2025-06-15', verificationCount: 1, createdBy: 'u2', createdAt: '2024-11-01' },
+  { id: 'v6', name: 'Cervecería Gol Norte', address: 'C/ Princesa 8', city: 'Madrid', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 88, lastVerified: '2026-02-28', verificationCount: 4, createdBy: 'u3', createdAt: '2025-01-10' },
 ];
 
 export const MOCK_TABLES: VenueTable[] = [
-  { id: 't1', venueId: 'v1', brand: 'Presas', quantity: 2, photos: [] },
-  { id: 't2', venueId: 'v2', brand: 'Tsunami', quantity: 1, photos: [] },
-  { id: 't3', venueId: 'v3', brand: 'Val', quantity: 1, photos: [] },
-  { id: 't4', venueId: 'v4', brand: 'Presas', quantity: 3, photos: [] },
-  { id: 't5', venueId: 'v5', brand: 'Garlando', quantity: 1, photos: [] },
-  { id: 't6', venueId: 'v6', brand: 'Infinity', quantity: 2, photos: [] },
+  { id: 't1', venueId: 'v1', brand: 'Presas', quantity: 2, condition: 'buen_estado', photos: [] },
+  { id: 't2', venueId: 'v2', brand: 'Tsunami', quantity: 1, condition: 'perfecta', photos: [] },
+  { id: 't3', venueId: 'v3', brand: 'Val', quantity: 1, condition: 'estado_normal', photos: [] },
+  { id: 't4', venueId: 'v4', brand: 'Presas', quantity: 3, condition: 'perfecta', photos: [] },
+  { id: 't5', venueId: 'v5', brand: 'Garlando', quantity: 1, condition: 'deteriorada', photos: [] },
+  { id: 't6', venueId: 'v6', brand: 'Infinity', quantity: 2, condition: 'buen_estado', photos: [] },
 ];
 
 export const MOCK_TOURNAMENTS: Tournament[] = [
@@ -75,9 +539,7 @@ export const MOCK_TOURNAMENTS: Tournament[] = [
     format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
     hasWaitlist: false, entryFee: 5,
     organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: true,
-    status: 'abierto', hasCategories: false,
-    categories: [],
-    createdAt: '2026-03-05',
+    status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-03-05',
   },
   {
     id: 'to3', name: 'Txoko Open', description: 'El torneo más grande del norte. Eliminación doble, categorías Máster y Pro.',
@@ -102,81 +564,48 @@ export const MOCK_TOURNAMENTS: Tournament[] = [
     organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
     status: 'en_curso', hasCategories: false, categories: [], createdAt: '2026-03-10',
   },
+  {
+    id: 'to5', name: 'Copa Grupos Madrid', description: 'Torneo de grupos + cuadro final. Fase de grupos con round robin, luego eliminación.',
+    date: '2026-04-12', time: '17:00', venueId: 'v6', venueName: 'Cervecería Gol Norte',
+    city: 'Madrid', tableBrand: 'Infinity', playStyle: 'parado',
+    format: 'grupos_cuadro', pairingMode: 'inscripcion', maxPairs: 12,
+    hasWaitlist: false, entryFee: 10,
+    organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
+    status: 'en_curso', hasCategories: false, categories: [], createdAt: '2026-03-08',
+    groupSize: 3, qualifyPerGroup: 2,
+  },
 ];
 
 export const MOCK_PAIRS: TournamentPair[] = [
-  {
-    id: 'p1', tournamentId: 'to1',
-    goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 },
-    forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 },
-    seed: 1, status: 'confirmada',
-  },
-  {
-    id: 'p2', tournamentId: 'to1',
-    goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 },
-    forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 },
-    seed: 2, status: 'confirmada',
-  },
-  {
-    id: 'p3', tournamentId: 'to1',
-    goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 },
-    forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 },
-    seed: 3, status: 'inscrita',
-  },
-  {
-    id: 'p4', tournamentId: 'to1',
-    goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 },
-    forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 },
-    seed: 4, status: 'inscrita',
-  },
-  {
-    id: 'p5', tournamentId: 'to1',
-    goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 },
-    forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 },
-    seed: 5, status: 'inscrita',
-  },
-  {
-    id: 'p6', tournamentId: 'to1',
-    goalkeeper: { userId: 'u2', displayName: 'Laura Martínez', elo: 1780 },
-    forward: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1680 },
-    seed: 6, status: 'inscrita',
-  },
+  { id: 'p1', tournamentId: 'to1', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 }, seed: 1, status: 'confirmada' },
+  { id: 'p2', tournamentId: 'to1', goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 }, forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 }, seed: 2, status: 'confirmada' },
+  { id: 'p3', tournamentId: 'to1', goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 3, status: 'inscrita' },
+  { id: 'p4', tournamentId: 'to1', goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 }, forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 }, seed: 4, status: 'inscrita' },
+  { id: 'p5', tournamentId: 'to1', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 5, status: 'inscrita' },
+  { id: 'p6', tournamentId: 'to1', goalkeeper: { userId: 'u2', displayName: 'Laura Martínez', elo: 1780 }, forward: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1680 }, seed: 6, status: 'inscrita' },
   // Rey de la pista pairs
-  {
-    id: 'pk1', tournamentId: 'to4',
-    goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 },
-    forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 },
-    seed: 1, status: 'confirmada',
-  },
-  {
-    id: 'pk2', tournamentId: 'to4',
-    goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 },
-    forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 },
-    seed: 2, status: 'confirmada',
-  },
-  {
-    id: 'pk3', tournamentId: 'to4',
-    goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 },
-    forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 },
-    seed: 3, status: 'inscrita',
-  },
-  {
-    id: 'pk4', tournamentId: 'to4',
-    goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 },
-    forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 },
-    seed: 4, status: 'inscrita',
-  },
+  { id: 'pk1', tournamentId: 'to4', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 }, seed: 1, status: 'confirmada' },
+  { id: 'pk2', tournamentId: 'to4', goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 }, forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 }, seed: 2, status: 'confirmada' },
+  { id: 'pk3', tournamentId: 'to4', goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 3, status: 'inscrita' },
+  { id: 'pk4', tournamentId: 'to4', goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 }, forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 }, seed: 4, status: 'inscrita' },
+  // Grupos + Cuadro pairs (to5)
+  { id: 'pg1', tournamentId: 'to5', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 }, seed: 1, status: 'confirmada' },
+  { id: 'pg2', tournamentId: 'to5', goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 }, forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 }, seed: 2, status: 'confirmada' },
+  { id: 'pg3', tournamentId: 'to5', goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 3, status: 'confirmada' },
+  { id: 'pg4', tournamentId: 'to5', goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 }, forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 }, seed: 4, status: 'confirmada' },
+  { id: 'pg5', tournamentId: 'to5', goalkeeper: { userId: 'u2', displayName: 'Laura Martínez', elo: 1780 }, forward: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1680 }, seed: 5, status: 'confirmada' },
+  { id: 'pg6', tournamentId: 'to5', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 6, status: 'confirmada' },
 ];
 
-export const MOCK_RANKINGS: (PlayerRating & { displayName: string; city: string; avatarUrl?: string })[] = [
-  { userId: 'u1', displayName: 'Carlos García', city: 'Madrid', general: 1850, asGoalkeeper: 1900, asForward: 1750, byTable: { Presas: 1880, Tsunami: 1700 }, byStyle: { parado: 1870, movimiento: 1780 }, wins: 142, losses: 58, tournamentsPlayed: 34, tournamentsWon: 8 },
-  { userId: 'u2', displayName: 'Laura Martínez', city: 'Barcelona', general: 1820, asGoalkeeper: 1780, asForward: 1860, byTable: { Tsunami: 1850, Presas: 1750 }, byStyle: { parado: 1790, movimiento: 1850 }, wins: 128, losses: 52, tournamentsPlayed: 30, tournamentsWon: 7 },
-  { userId: 'u3', displayName: 'Mikel Etxebarria', city: 'Bilbao', general: 1790, asGoalkeeper: 1830, asForward: 1720, byTable: { Presas: 1820 }, byStyle: { parado: 1810, movimiento: 1740 }, wins: 115, losses: 65, tournamentsPlayed: 28, tournamentsWon: 5 },
-  { userId: 'u4', displayName: 'Ana López', city: 'Sevilla', general: 1750, asGoalkeeper: 1700, asForward: 1800, byTable: { Val: 1780 }, byStyle: { parado: 1720, movimiento: 1780 }, wins: 98, losses: 62, tournamentsPlayed: 25, tournamentsWon: 4 },
-  { userId: 'u5', displayName: 'Pedro Sánchez', city: 'Valencia', general: 1720, asGoalkeeper: 1740, asForward: 1680, byTable: { Garlando: 1750 }, byStyle: { parado: 1730, movimiento: 1700 }, wins: 89, losses: 71, tournamentsPlayed: 22, tournamentsWon: 3 },
-  { userId: 'u6', displayName: 'María Fernández', city: 'Madrid', general: 1700, asGoalkeeper: 1650, asForward: 1750, byTable: { Presas: 1710, Infinity: 1690 }, byStyle: { parado: 1680, movimiento: 1720 }, wins: 82, losses: 68, tournamentsPlayed: 20, tournamentsWon: 2 },
-  { userId: 'u7', displayName: 'Javi Ruiz', city: 'Bilbao', general: 1680, asGoalkeeper: 1720, asForward: 1620, byTable: { Presas: 1700 }, byStyle: { parado: 1700, movimiento: 1650 }, wins: 76, losses: 74, tournamentsPlayed: 18, tournamentsWon: 2 },
-  { userId: 'u8', displayName: 'Elena Torres', city: 'Barcelona', general: 1650, asGoalkeeper: 1600, asForward: 1700, byTable: { Tsunami: 1680 }, byStyle: { parado: 1630, movimiento: 1670 }, wins: 70, losses: 60, tournamentsPlayed: 16, tournamentsWon: 1 },
+export const MOCK_RANKINGS: (PlayerRating & { displayName: string; city: string; postalCode?: string; avatarUrl?: string; preferredPosition?: Position; preferredStyle?: 'parado' | 'movimiento'; preferredTable?: TableBrand; playerType?: PlayerType })[] = [
+  { userId: 'u1', displayName: 'Carlos García', city: 'Madrid', postalCode: '28001', general: 1850, asGoalkeeper: 1900, asForward: 1750, byTable: { Presas: 1880, Tsunami: 1700 }, byStyle: { parado: 1870, movimiento: 1780 }, wins: 142, losses: 58, tournamentsPlayed: 34, tournamentsWon: 8, mvpCount: 5, currentStreak: 3, bestStreak: 8, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u2', displayName: 'Laura Martínez', city: 'Barcelona', postalCode: '08001', general: 1820, asGoalkeeper: 1780, asForward: 1860, byTable: { Tsunami: 1850, Presas: 1750 }, byStyle: { parado: 1790, movimiento: 1850 }, wins: 128, losses: 52, tournamentsPlayed: 30, tournamentsWon: 7, mvpCount: 3, currentStreak: 1, bestStreak: 6, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
+  { userId: 'u3', displayName: 'Mikel Etxebarria', city: 'Bilbao', postalCode: '48001', general: 1790, asGoalkeeper: 1830, asForward: 1720, byTable: { Presas: 1820 }, byStyle: { parado: 1810, movimiento: 1740 }, wins: 115, losses: 65, tournamentsPlayed: 28, tournamentsWon: 5, mvpCount: 2, currentStreak: 0, bestStreak: 5, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u4', displayName: 'Ana López', city: 'Sevilla', postalCode: '41001', general: 1750, asGoalkeeper: 1700, asForward: 1800, byTable: { Val: 1780 }, byStyle: { parado: 1720, movimiento: 1780 }, wins: 98, losses: 62, tournamentsPlayed: 25, tournamentsWon: 4, mvpCount: 1, currentStreak: 2, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Val', playerType: 'registrado' },
+  { userId: 'u5', displayName: 'Pedro Sánchez', city: 'Valencia', postalCode: '46001', general: 1720, asGoalkeeper: 1740, asForward: 1680, byTable: { Garlando: 1750 }, byStyle: { parado: 1730, movimiento: 1700 }, wins: 89, losses: 71, tournamentsPlayed: 22, tournamentsWon: 3, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Garlando', playerType: 'registrado' },
+  { userId: 'u6', displayName: 'María Fernández', city: 'Madrid', postalCode: '28002', general: 1700, asGoalkeeper: 1650, asForward: 1750, byTable: { Presas: 1710, Infinity: 1690 }, byStyle: { parado: 1680, movimiento: 1720 }, wins: 82, losses: 68, tournamentsPlayed: 20, tournamentsWon: 2, mvpCount: 1, currentStreak: 1, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u7', displayName: 'Javi Ruiz', city: 'Bilbao', postalCode: '48002', general: 1680, asGoalkeeper: 1720, asForward: 1620, byTable: { Presas: 1700 }, byStyle: { parado: 1700, movimiento: 1650 }, wins: 76, losses: 74, tournamentsPlayed: 18, tournamentsWon: 2, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u8', displayName: 'Elena Torres', city: 'Barcelona', postalCode: '08002', general: 1650, asGoalkeeper: 1600, asForward: 1700, byTable: { Tsunami: 1680 }, byStyle: { parado: 1630, movimiento: 1670 }, wins: 70, losses: 60, tournamentsPlayed: 16, tournamentsWon: 1, mvpCount: 0, currentStreak: 2, bestStreak: 3, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
 ];
 
 export const MOCK_TEAMS: Team[] = [
@@ -190,71 +619,88 @@ export function getTableForVenue(venueId: string): VenueTable | undefined {
 }
 
 export const TABLE_BRAND_COLORS: Record<string, string> = {
-  Presas: '#2563eb',
-  Tsunami: '#0891b2',
-  Infinity: '#7c3aed',
-  Val: '#059669',
-  Garlando: '#dc2626',
-  Leonhart: '#ca8a04',
-  Tornado: '#ea580c',
-  Otro: '#6b7280',
+  Presas: '#2563eb', Tsunami: '#0891b2', Infinity: '#7c3aed', Val: '#059669',
+  Garlando: '#dc2626', Leonhart: '#ca8a04', Tornado: '#ea580c', Otro: '#6b7280',
 };
 
 export const TABLE_BRAND_SHORT: Record<string, string> = {
-  Presas: 'PRE',
-  Tsunami: 'TSU',
-  Infinity: 'INF',
-  Val: 'VAL',
-  Garlando: 'GAR',
-  Leonhart: 'LEO',
-  Tornado: 'TOR',
-  Otro: '?',
+  Presas: 'PRE', Tsunami: 'TSU', Infinity: 'INF', Val: 'VAL',
+  Garlando: 'GAR', Leonhart: 'LEO', Tornado: 'TOR', Otro: '?',
 };
 
-/** Search players in the ranking by name (case-insensitive, partial match) */
+export const TABLE_CONDITION_LABELS: Record<string, string> = {
+  perfecta: 'Perfecta', buen_estado: 'Buen estado', estado_normal: 'Estado normal',
+  deteriorada: 'Deteriorada', fuera_de_servicio: 'Fuera de servicio',
+};
+
+export const TABLE_CONDITION_COLORS: Record<string, string> = {
+  perfecta: 'bg-success text-success-foreground', buen_estado: 'bg-primary/10 text-primary',
+  estado_normal: 'bg-muted text-muted-foreground', deteriorada: 'bg-warning/20 text-warning-foreground',
+  fuera_de_servicio: 'bg-destructive/10 text-destructive',
+};
+
 export function searchPlayers(query: string) {
   if (!query || query.trim().length < 2) return [];
   const q = query.toLowerCase();
-  return MOCK_RANKINGS.filter(r =>
-    r.displayName.toLowerCase().includes(q)
-  );
+  return MOCK_RANKINGS.filter(r => r.displayName.toLowerCase().includes(q));
 }
 
-/**
- * Find or create a player. Returns userId, displayName, and ELO for the given position.
- * If position is specified, returns position-specific ELO (asGoalkeeper or asForward).
- * Otherwise returns general ELO.
- */
-export function findOrCreatePlayer(
-  displayName: string,
-  city: string = '',
-  position?: Position
-): { userId: string; displayName: string; elo: number } {
-  const existing = MOCK_RANKINGS.find(
-    r => r.displayName.toLowerCase() === displayName.toLowerCase()
-  );
+export function findOrCreatePlayer(displayName: string, city: string = '', position?: Position): { userId: string; displayName: string; elo: number; playerType: PlayerType } {
+  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
   if (existing) {
     let elo = existing.general;
     if (position === 'portero') elo = existing.asGoalkeeper;
     else if (position === 'delantero') elo = existing.asForward;
-    return { userId: existing.userId, displayName: existing.displayName, elo };
+    return { userId: existing.userId, displayName: existing.displayName, elo, playerType: existing.playerType || 'registrado' };
   }
-  // Create new player with base ELO
+  // Check guest players
+  const guests = getGuestPlayers();
+  const existingGuest = guests.find(g => g.displayName.toLowerCase() === displayName.toLowerCase());
+  if (existingGuest) {
+    return { userId: existingGuest.id, displayName: existingGuest.displayName, elo: 1500, playerType: 'invitado' };
+  }
+  // Create as guest by default when not found
+  const guest = createGuestPlayer(displayName);
+  return { userId: guest.id, displayName: guest.displayName, elo: 1500, playerType: 'invitado' };
+}
+
+/** Create or find a registered player for enrollment */
+export function findOrCreateRegisteredPlayer(displayName: string, city: string = '', position?: Position): { userId: string; displayName: string; elo: number; playerType: PlayerType } {
+  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
+  if (existing) {
+    let elo = existing.general;
+    if (position === 'portero') elo = existing.asGoalkeeper;
+    else if (position === 'delantero') elo = existing.asForward;
+    return { userId: existing.userId, displayName: existing.displayName, elo, playerType: existing.playerType || 'registrado' };
+  }
   const BASE_ELO = 1500;
   const newUserId = `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   MOCK_RANKINGS.push({
-    userId: newUserId,
-    displayName,
-    city,
-    general: BASE_ELO,
-    asGoalkeeper: BASE_ELO,
-    asForward: BASE_ELO,
-    byTable: {},
-    byStyle: { parado: BASE_ELO, movimiento: BASE_ELO },
-    wins: 0,
-    losses: 0,
-    tournamentsPlayed: 0,
-    tournamentsWon: 0,
+    userId: newUserId, displayName, city,
+    general: BASE_ELO, asGoalkeeper: BASE_ELO, asForward: BASE_ELO,
+    byTable: {}, byStyle: { parado: BASE_ELO, movimiento: BASE_ELO },
+    wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
+    mvpCount: 0, currentStreak: 0, bestStreak: 0,
+    playerType: 'registrado',
   });
-  return { userId: newUserId, displayName, elo: BASE_ELO };
+  return { userId: newUserId, displayName, elo: BASE_ELO, playerType: 'registrado' };
+}
+
+export function getFrequentPartners(userId: string): { partnerId: string; partnerName: string; count: number }[] {
+  const partnerMap: Record<string, { name: string; count: number }> = {};
+  MOCK_PAIRS.forEach(pair => {
+    if (pair.goalkeeper.userId === userId && pair.forward.userId !== userId) {
+      const key = pair.forward.userId;
+      if (!partnerMap[key]) partnerMap[key] = { name: pair.forward.displayName, count: 0 };
+      partnerMap[key].count++;
+    }
+    if (pair.forward.userId === userId && pair.goalkeeper.userId !== userId) {
+      const key = pair.goalkeeper.userId;
+      if (!partnerMap[key]) partnerMap[key] = { name: pair.goalkeeper.displayName, count: 0 };
+      partnerMap[key].count++;
+    }
+  });
+  return Object.entries(partnerMap)
+    .map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count }))
+    .sort((a, b) => b.count - a.count);
 }
