@@ -88,6 +88,8 @@ export default function TournamentDetailPage() {
 
   const [eloChanges, setEloChanges] = useState<EloChangeDisplay[]>([]);
   const [, forceUpdate] = useState(0);
+  const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
+  const [selectedMvpId, setSelectedMvpId] = useState('');
 
   // === ENROLLMENT ===
   const [showEnrollDialog, setShowEnrollDialog] = useState(false);
@@ -213,6 +215,7 @@ export default function TournamentDetailPage() {
 
   // === ELO UPDATE HELPER ===
   const applyEloChanges = useCallback((winnerId: string, loserId: string, matchKey: string) => {
+    if (!tournament || tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
     const winnerPair = allPairs.find(p => p.id === winnerId);
     const loserPair = allPairs.find(p => p.id === loserId);
@@ -270,6 +273,7 @@ export default function TournamentDetailPage() {
 
   // === BRACKET: Select winner (elimination) ===
   const handleSelectWinner = useCallback((roundIdx: number, matchIdx: number, winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     setBracket(prev => {
       const newBracket = prev.map(r => r.map(m => ({ ...m })));
       const match = newBracket[roundIdx][matchIdx];
@@ -298,6 +302,7 @@ export default function TournamentDetailPage() {
 
   // === ROUND ROBIN: Select winner ===
   const handleRRSelectWinner = useCallback((matchId: string, winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     setRrMatches(prev => {
       const updated = prev.map(m => {
         if (m.id === matchId && !m.played) {
@@ -319,6 +324,7 @@ export default function TournamentDetailPage() {
 
   // === REY DE LA MESA: Select winner ===
   const handleKingSelectWinner = useCallback((winnerId: string) => {
+    if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
     if (!kingCourtPairId || !kingCurrentChallenger) return;
 
     const loserId = winnerId === kingCourtPairId ? kingCurrentChallenger : kingCourtPairId;
