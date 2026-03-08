@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer } from '@/data/mock';
-import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight } from 'lucide-react';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer } from '@/data/mock';
+import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
 import { toast } from 'sonner';
@@ -93,15 +93,36 @@ export default function TournamentDetailPage() {
   const [showEnrollDialog, setShowEnrollDialog] = useState(false);
   const [goalkeeperSearch, setGoalkeeperSearch] = useState('');
   const [forwardSearch, setForwardSearch] = useState('');
-  const [selectedGoalkeeper, setSelectedGoalkeeper] = useState<{ userId: string; displayName: string; elo: number } | null>(null);
-  const [selectedForward, setSelectedForward] = useState<{ userId: string; displayName: string; elo: number } | null>(null);
+  const [selectedGoalkeeper, setSelectedGoalkeeper] = useState<{ userId: string; displayName: string; elo: number; playerType?: string } | null>(null);
+  const [selectedForward, setSelectedForward] = useState<{ userId: string; displayName: string; elo: number; playerType?: string } | null>(null);
+  // Player type toggles for each slot
+  const [gkPlayerType, setGkPlayerType] = useState<'registrado' | 'invitado'>('registrado');
+  const [fwPlayerType, setFwPlayerType] = useState<'registrado' | 'invitado'>('registrado');
+  // Guest postal codes
+  const [gkPostalCode, setGkPostalCode] = useState('');
+  const [fwPostalCode, setFwPostalCode] = useState('');
 
-  const goalkeeperResults = useMemo(() => searchPlayers(goalkeeperSearch), [goalkeeperSearch]);
-  const forwardResults = useMemo(() => searchPlayers(forwardSearch), [forwardSearch]);
+  const goalkeeperResults = useMemo(() => {
+    if (gkPlayerType === 'invitado') return [];
+    return searchPlayers(goalkeeperSearch);
+  }, [goalkeeperSearch, gkPlayerType]);
+
+  const forwardResults = useMemo(() => {
+    if (fwPlayerType === 'invitado') return [];
+    return searchPlayers(forwardSearch);
+  }, [forwardSearch, fwPlayerType]);
+
+  const resetEnrollDialog = () => {
+    setShowEnrollDialog(false);
+    setGoalkeeperSearch(''); setForwardSearch('');
+    setSelectedGoalkeeper(null); setSelectedForward(null);
+    setGkPlayerType('registrado'); setFwPlayerType('registrado');
+    setGkPostalCode(''); setFwPostalCode('');
+  };
 
   const handleEnrollPair = () => {
-    const gkName = selectedGoalkeeper?.displayName || goalkeeperSearch.trim();
-    const fwName = selectedForward?.displayName || forwardSearch.trim();
+    let gkName = selectedGoalkeeper?.displayName || goalkeeperSearch.trim();
+    let fwName = selectedForward?.displayName || forwardSearch.trim();
 
     if (!gkName || !fwName) {
       toast.error('Ambos jugadores son obligatorios');
@@ -115,9 +136,29 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    // FIX #3: Use position-specific ELO
-    const gk = selectedGoalkeeper || findOrCreatePlayer(gkName, tournament.city, 'portero');
-    const fw = selectedForward || findOrCreatePlayer(fwName, tournament.city, 'delantero');
+    // Resolve goalkeeper
+    let gk: { userId: string; displayName: string; elo: number; playerType?: string };
+    if (selectedGoalkeeper) {
+      gk = selectedGoalkeeper;
+    } else if (gkPlayerType === 'invitado') {
+      const guest = createGuestPlayer(gkName, gkPostalCode || undefined);
+      gk = { userId: guest.id, displayName: guest.displayName, elo: 1500, playerType: 'invitado' };
+    } else {
+      const found = findOrCreatePlayer(gkName, tournament.city, 'portero');
+      gk = found;
+    }
+
+    // Resolve forward
+    let fw: { userId: string; displayName: string; elo: number; playerType?: string };
+    if (selectedForward) {
+      fw = selectedForward;
+    } else if (fwPlayerType === 'invitado') {
+      const guest = createGuestPlayer(fwName, fwPostalCode || undefined);
+      fw = { userId: guest.id, displayName: guest.displayName, elo: 1500, playerType: 'invitado' };
+    } else {
+      const found = findOrCreatePlayer(fwName, tournament.city, 'delantero');
+      fw = found;
+    }
 
     const newPair: TournamentPair = {
       id: `p_${Date.now()}`,
@@ -126,11 +167,13 @@ export default function TournamentDetailPage() {
         userId: gk.userId,
         displayName: gk.displayName,
         elo: gk.elo,
+        playerType: (gk.playerType as any) || (gkPlayerType === 'invitado' ? 'invitado' : 'registrado'),
       },
       forward: {
         userId: fw.userId,
         displayName: fw.displayName,
         elo: fw.elo,
+        playerType: (fw.playerType as any) || (fwPlayerType === 'invitado' ? 'invitado' : 'registrado'),
       },
       seed: currentPairs.length + 1,
       status: 'inscrita',
@@ -145,7 +188,6 @@ export default function TournamentDetailPage() {
         setRrMatches(generateRoundRobinMatches(updatedPairs));
       }
     } else if (isKingMode) {
-      // Add to queue for King mode
       if (!kingCourtPairId && updatedPairs.length >= 1) {
         setKingCourtPairId(updatedPairs[0].id);
         if (updatedPairs.length >= 2) {
@@ -163,11 +205,7 @@ export default function TournamentDetailPage() {
       }
     }
 
-    setGoalkeeperSearch('');
-    setForwardSearch('');
-    setSelectedGoalkeeper(null);
-    setSelectedForward(null);
-    setShowEnrollDialog(false);
+    resetEnrollDialog();
     toast.success('Pareja inscrita correctamente');
     forceUpdate(n => n + 1);
   };
@@ -189,6 +227,7 @@ export default function TournamentDetailPage() {
       const changes: EloChangeDisplay['changes'] = [];
 
       const updateRanking = (userId: string, displayName: string, change: number, position: string) => {
+        if (isGuestPlayer(userId)) return; // Don't update ranking for guests
         const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
         if (ranking) {
           const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
@@ -274,7 +313,6 @@ export default function TournamentDetailPage() {
     const loserId = winnerId === kingCourtPairId ? kingCurrentChallenger : kingCourtPairId;
     const matchId = `king_${kingHistory.length}`;
 
-    // Record match
     setKingHistory(prev => [...prev, {
       id: matchId,
       courtPairId: kingCourtPairId,
@@ -282,20 +320,15 @@ export default function TournamentDetailPage() {
       winnerId,
     }]);
 
-    // Apply ELO
     applyEloChanges(winnerId, loserId, matchId);
 
-    // Update court: winner stays, loser exits
     if (winnerId === kingCourtPairId) {
-      // Court pair wins, stays
       setKingWinStreak(prev => prev + 1);
     } else {
-      // Challenger wins, becomes new court pair
       setKingCourtPairId(winnerId);
       setKingWinStreak(1);
     }
 
-    // Next challenger from queue
     if (kingQueue.length > 0) {
       setKingCurrentChallenger(kingQueue[0]);
       setKingQueue(q => q.slice(1));
@@ -329,10 +362,7 @@ export default function TournamentDetailPage() {
     return pairs.find(p => p.id === pairId) || MOCK_PAIRS.find(p => p.id === pairId);
   };
 
-  // Round Robin standings
   const rrStandings = isRoundRobin ? calculateRoundRobinStandings(MOCK_PAIRS.filter(p => p.tournamentId === id), rrMatches) : [];
-
-  // King mode: check if finished
   const kingFinished = isKingMode && !kingCurrentChallenger && kingHistory.length > 0;
 
   return (
@@ -427,11 +457,13 @@ export default function TournamentDetailPage() {
                     <Shield className="h-3 w-3 text-primary shrink-0" />
                     <span className="text-sm font-medium truncate">{pair.goalkeeper.displayName}</span>
                     <span className="text-[10px] text-muted-foreground">{pair.goalkeeper.elo}</span>
+                    <PlayerTypeBadge type={pair.goalkeeper.playerType} userId={pair.goalkeeper.userId} />
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <Target className="h-3 w-3 text-secondary shrink-0" />
                     <span className="text-sm font-medium truncate">{pair.forward.displayName}</span>
                     <span className="text-[10px] text-muted-foreground">{pair.forward.elo}</span>
+                    <PlayerTypeBadge type={pair.forward.playerType} userId={pair.forward.userId} />
                   </div>
                 </div>
                 <span className="text-xs text-muted-foreground capitalize">{pair.status}</span>
@@ -446,7 +478,6 @@ export default function TournamentDetailPage() {
       {/* === REY DE LA MESA VIEW === */}
       {isKingMode && pairs.length >= 2 && (
         <div className="space-y-4 mb-4">
-          {/* Current court */}
           <div className="rounded-xl bg-card p-4 shadow-card border-2 border-primary/30">
             <div className="flex items-center gap-2 mb-3">
               <Crown className="h-5 w-5 text-accent" />
@@ -464,7 +495,6 @@ export default function TournamentDetailPage() {
             )}
           </div>
 
-          {/* Current match */}
           {kingCurrentChallenger && kingCourtPairId && (
             <div className="rounded-xl bg-card p-4 shadow-card">
               <h3 className="font-display text-sm font-semibold mb-3">⚔️ Partido en curso</h3>
@@ -498,7 +528,6 @@ export default function TournamentDetailPage() {
             </div>
           )}
 
-          {/* Queue */}
           {kingQueue.length > 0 && (
             <div className="rounded-xl bg-card p-4 shadow-card">
               <div className="flex items-center gap-2 mb-3">
@@ -519,7 +548,6 @@ export default function TournamentDetailPage() {
             </div>
           )}
 
-          {/* Finished */}
           {kingFinished && (
             <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-center">
               <Trophy className="h-8 w-8 mx-auto text-accent mb-2" />
@@ -531,7 +559,6 @@ export default function TournamentDetailPage() {
             </div>
           )}
 
-          {/* No more challengers */}
           {!kingCurrentChallenger && !kingFinished && kingQueue.length === 0 && pairs.length >= 2 && (
             <div className="rounded-xl bg-muted p-4 text-center">
               <p className="text-sm text-muted-foreground">No quedan más retadores en la cola.</p>
@@ -539,7 +566,6 @@ export default function TournamentDetailPage() {
             </div>
           )}
 
-          {/* History */}
           {kingHistory.length > 0 && (
             <div className="rounded-xl bg-card p-4 shadow-card">
               <h3 className="font-display text-sm font-semibold mb-3">📋 Historial de partidos</h3>
@@ -550,9 +576,9 @@ export default function TournamentDetailPage() {
                   return (
                     <div key={m.id} className="flex items-center gap-2 text-xs rounded-lg bg-muted p-2.5">
                       <span className="font-bold text-muted-foreground w-6">#{i + 1}</span>
-                      <span className="font-semibold text-green-700">{winner}</span>
+                      <span className="font-semibold text-success">{winner}</span>
                       <span className="text-muted-foreground">vs</span>
-                      <span className="text-red-500">{loser}</span>
+                      <span className="text-destructive">{loser}</span>
                     </div>
                   );
                 })}
@@ -587,8 +613,8 @@ export default function TournamentDetailPage() {
                     <td className="py-2 pr-2 font-bold text-primary">{i + 1}</td>
                     <td className="py-2 pr-2 font-medium truncate max-w-[140px]">{getPairName(s.pairId)}</td>
                     <td className="py-2 px-2 text-center text-muted-foreground">{s.played}</td>
-                    <td className="py-2 px-2 text-center text-green-600 font-medium">{s.wins}</td>
-                    <td className="py-2 px-2 text-center text-red-500 font-medium">{s.losses}</td>
+                    <td className="py-2 px-2 text-center text-success font-medium">{s.wins}</td>
+                    <td className="py-2 px-2 text-center text-destructive font-medium">{s.losses}</td>
                     <td className="py-2 pl-2 text-center font-bold">{s.points}</td>
                   </tr>
                 ))}
@@ -611,23 +637,23 @@ export default function TournamentDetailPage() {
                 <div key={match.id} className={`rounded-lg border p-3 text-xs ${match.played ? 'border-border bg-muted/30' : 'border-border bg-card'}`}>
                   <div
                     className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                      match.winnerId === match.pair1Id ? 'bg-green-50 font-semibold text-green-800' : ''
+                      match.winnerId === match.pair1Id ? 'bg-success/10 font-semibold text-success' : ''
                     } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
                     onClick={() => canSelect && handleRRSelectWinner(match.id, match.pair1Id)}
                   >
                     <span>{getPairName(match.pair1Id)}</span>
-                    {match.winnerId === match.pair1Id && <Check className="h-3 w-3 text-green-600" />}
+                    {match.winnerId === match.pair1Id && <Check className="h-3 w-3 text-success" />}
                     {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
                   </div>
                   <div className="h-px bg-border my-0.5" />
                   <div
                     className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                      match.winnerId === match.pair2Id ? 'bg-green-50 font-semibold text-green-800' : ''
+                      match.winnerId === match.pair2Id ? 'bg-success/10 font-semibold text-success' : ''
                     } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
                     onClick={() => canSelect && handleRRSelectWinner(match.id, match.pair2Id)}
                   >
                     <span>{getPairName(match.pair2Id)}</span>
-                    {match.winnerId === match.pair2Id && <Check className="h-3 w-3 text-green-600" />}
+                    {match.winnerId === match.pair2Id && <Check className="h-3 w-3 text-success" />}
                     {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
                   </div>
                 </div>
@@ -668,7 +694,7 @@ export default function TournamentDetailPage() {
                     <span className="font-medium">{c.displayName} <span className="text-muted-foreground">({c.position})</span></span>
                     <span className="flex items-center gap-1">
                       <span className="text-muted-foreground">{c.previousElo}</span>
-                      <span className={c.change >= 0 ? 'text-green-600 font-semibold' : 'text-red-500 font-semibold'}>
+                      <span className={c.change >= 0 ? 'text-success font-semibold' : 'text-destructive font-semibold'}>
                         {c.change >= 0 ? `+${c.change}` : c.change}
                       </span>
                       <span className="font-bold">{c.newElo}</span>
@@ -697,23 +723,37 @@ export default function TournamentDetailPage() {
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-lg font-bold">Inscribir pareja</h3>
-              <button onClick={() => { setShowEnrollDialog(false); setGoalkeeperSearch(''); setForwardSearch(''); setSelectedGoalkeeper(null); setSelectedForward(null); }}>
+              <button onClick={resetEnrollDialog}>
                 <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
 
             <div className="flex flex-col gap-4">
-              {/* Goalkeeper */}
+              {/* Goalkeeper slot */}
               <div className="rounded-lg bg-muted p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Shield className="h-4 w-4 text-primary" />
                   <span className="text-xs font-semibold text-primary uppercase tracking-wider">Portero</span>
                 </div>
+
+                {/* Player type toggle */}
+                <div className="flex gap-1 mb-2">
+                  <button onClick={() => { setGkPlayerType('registrado'); setSelectedGoalkeeper(null); setGoalkeeperSearch(''); }}
+                    className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${gkPlayerType === 'registrado' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
+                    <UserCheck className="h-3 w-3" /> Registrado
+                  </button>
+                  <button onClick={() => { setGkPlayerType('invitado'); setSelectedGoalkeeper(null); setGoalkeeperSearch(''); }}
+                    className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${gkPlayerType === 'invitado' ? 'bg-warning text-warning-foreground' : 'bg-card text-muted-foreground'}`}>
+                    <UserPlus className="h-3 w-3" /> Invitado
+                  </button>
+                </div>
+
                 {selectedGoalkeeper ? (
                   <div className="flex items-center justify-between rounded-lg border border-primary bg-primary/5 px-3 py-2">
                     <div>
                       <span className="text-sm font-medium">{selectedGoalkeeper.displayName}</span>
                       <span className="ml-2 text-xs text-muted-foreground">ELO Portero: {selectedGoalkeeper.elo}</span>
+                      <PlayerTypeBadge type={selectedGoalkeeper.playerType} userId={selectedGoalkeeper.userId} />
                     </div>
                     <button onClick={() => { setSelectedGoalkeeper(null); setGoalkeeperSearch(''); }}>
                       <X className="h-4 w-4 text-muted-foreground" />
@@ -725,30 +765,44 @@ export default function TournamentDetailPage() {
                       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                       <input
                         className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        placeholder="Buscar jugador por nombre..."
+                        placeholder={gkPlayerType === 'invitado' ? 'Nombre del invitado...' : 'Buscar jugador por nombre...'}
                         value={goalkeeperSearch}
                         onChange={e => setGoalkeeperSearch(e.target.value)}
                       />
                     </div>
+                    {gkPlayerType === 'invitado' && goalkeeperSearch.trim().length >= 2 && (
+                      <div className="mt-2">
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase">Código postal (opcional)</label>
+                        <input
+                          className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="Ej: 28001"
+                          value={gkPostalCode}
+                          onChange={e => setGkPostalCode(e.target.value)}
+                        />
+                        <p className="mt-1 text-[10px] text-warning-foreground">👤 Se añadirá como jugador invitado (sin ranking)</p>
+                      </div>
+                    )}
                     {goalkeeperResults.length > 0 && (
                       <div className="mt-1 max-h-32 overflow-y-auto rounded-lg border border-border bg-card">
                         {goalkeeperResults.map(p => (
                           <button
                             key={p.userId}
                             onClick={() => {
-                              // FIX #3: Use goalkeeper-specific ELO
-                              setSelectedGoalkeeper({ userId: p.userId, displayName: p.displayName, elo: p.asGoalkeeper });
+                              setSelectedGoalkeeper({ userId: p.userId, displayName: p.displayName, elo: p.asGoalkeeper, playerType: p.playerType || 'registrado' });
                               setGoalkeeperSearch('');
                             }}
                             className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition"
                           >
-                            <span className="font-medium">{p.displayName}</span>
-                            <span className="text-xs text-muted-foreground">ELO Portero: {p.asGoalkeeper}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{p.displayName}</span>
+                              <span className="rounded bg-success/10 px-1 py-0.5 text-[9px] font-semibold text-success">✓ Reg.</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">ELO: {p.asGoalkeeper}</span>
                           </button>
                         ))}
                       </div>
                     )}
-                    {goalkeeperSearch.trim().length >= 2 && goalkeeperResults.length === 0 && (
+                    {gkPlayerType === 'registrado' && goalkeeperSearch.trim().length >= 2 && goalkeeperResults.length === 0 && (
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         No encontrado. Se creará como nuevo jugador con ELO base 1500.
                       </p>
@@ -757,17 +811,31 @@ export default function TournamentDetailPage() {
                 )}
               </div>
 
-              {/* Forward */}
+              {/* Forward slot */}
               <div className="rounded-lg bg-muted p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Target className="h-4 w-4 text-secondary" />
                   <span className="text-xs font-semibold text-secondary uppercase tracking-wider">Delantero</span>
                 </div>
+
+                {/* Player type toggle */}
+                <div className="flex gap-1 mb-2">
+                  <button onClick={() => { setFwPlayerType('registrado'); setSelectedForward(null); setForwardSearch(''); }}
+                    className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${fwPlayerType === 'registrado' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
+                    <UserCheck className="h-3 w-3" /> Registrado
+                  </button>
+                  <button onClick={() => { setFwPlayerType('invitado'); setSelectedForward(null); setForwardSearch(''); }}
+                    className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${fwPlayerType === 'invitado' ? 'bg-warning text-warning-foreground' : 'bg-card text-muted-foreground'}`}>
+                    <UserPlus className="h-3 w-3" /> Invitado
+                  </button>
+                </div>
+
                 {selectedForward ? (
                   <div className="flex items-center justify-between rounded-lg border border-secondary bg-secondary/5 px-3 py-2">
                     <div>
                       <span className="text-sm font-medium">{selectedForward.displayName}</span>
                       <span className="ml-2 text-xs text-muted-foreground">ELO Delantero: {selectedForward.elo}</span>
+                      <PlayerTypeBadge type={selectedForward.playerType} userId={selectedForward.userId} />
                     </div>
                     <button onClick={() => { setSelectedForward(null); setForwardSearch(''); }}>
                       <X className="h-4 w-4 text-muted-foreground" />
@@ -779,30 +847,44 @@ export default function TournamentDetailPage() {
                       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                       <input
                         className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        placeholder="Buscar jugador por nombre..."
+                        placeholder={fwPlayerType === 'invitado' ? 'Nombre del invitado...' : 'Buscar jugador por nombre...'}
                         value={forwardSearch}
                         onChange={e => setForwardSearch(e.target.value)}
                       />
                     </div>
+                    {fwPlayerType === 'invitado' && forwardSearch.trim().length >= 2 && (
+                      <div className="mt-2">
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase">Código postal (opcional)</label>
+                        <input
+                          className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="Ej: 28001"
+                          value={fwPostalCode}
+                          onChange={e => setFwPostalCode(e.target.value)}
+                        />
+                        <p className="mt-1 text-[10px] text-warning-foreground">👤 Se añadirá como jugador invitado (sin ranking)</p>
+                      </div>
+                    )}
                     {forwardResults.length > 0 && (
                       <div className="mt-1 max-h-32 overflow-y-auto rounded-lg border border-border bg-card">
                         {forwardResults.map(p => (
                           <button
                             key={p.userId}
                             onClick={() => {
-                              // FIX #3: Use forward-specific ELO
-                              setSelectedForward({ userId: p.userId, displayName: p.displayName, elo: p.asForward });
+                              setSelectedForward({ userId: p.userId, displayName: p.displayName, elo: p.asForward, playerType: p.playerType || 'registrado' });
                               setForwardSearch('');
                             }}
                             className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition"
                           >
-                            <span className="font-medium">{p.displayName}</span>
-                            <span className="text-xs text-muted-foreground">ELO Delantero: {p.asForward}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{p.displayName}</span>
+                              <span className="rounded bg-success/10 px-1 py-0.5 text-[9px] font-semibold text-success">✓ Reg.</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">ELO: {p.asForward}</span>
                           </button>
                         ))}
                       </div>
                     )}
-                    {forwardSearch.trim().length >= 2 && forwardResults.length === 0 && (
+                    {fwPlayerType === 'registrado' && forwardSearch.trim().length >= 2 && forwardResults.length === 0 && (
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         No encontrado. Se creará como nuevo jugador con ELO base 1500.
                       </p>
@@ -814,7 +896,7 @@ export default function TournamentDetailPage() {
 
             <div className="mt-4 flex gap-2">
               <button
-                onClick={() => { setShowEnrollDialog(false); setGoalkeeperSearch(''); setForwardSearch(''); setSelectedGoalkeeper(null); setSelectedForward(null); }}
+                onClick={resetEnrollDialog}
                 className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground"
               >
                 Cancelar
@@ -833,6 +915,15 @@ export default function TournamentDetailPage() {
   );
 }
 
+// === PLAYER TYPE BADGE ===
+function PlayerTypeBadge({ type, userId }: { type?: string; userId?: string }) {
+  const isGuest = type === 'invitado' || (userId && isGuestPlayer(userId));
+  if (isGuest) {
+    return <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-semibold text-warning-foreground">👤 Inv.</span>;
+  }
+  return null;
+}
+
 // === PAIR DISPLAY COMPONENT ===
 function PairDisplay({ pair, label }: { pair?: TournamentPair | null; label?: string }) {
   if (!pair) return <p className="text-sm text-muted-foreground">—</p>;
@@ -843,11 +934,13 @@ function PairDisplay({ pair, label }: { pair?: TournamentPair | null; label?: st
         <Shield className="h-3 w-3 text-primary shrink-0" />
         <span className="text-sm font-medium">{pair.goalkeeper.displayName}</span>
         <span className="text-[10px] text-muted-foreground">{pair.goalkeeper.elo}</span>
+        <PlayerTypeBadge type={pair.goalkeeper.playerType} userId={pair.goalkeeper.userId} />
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
         <Target className="h-3 w-3 text-secondary shrink-0" />
         <span className="text-sm font-medium">{pair.forward.displayName}</span>
         <span className="text-[10px] text-muted-foreground">{pair.forward.elo}</span>
+        <PlayerTypeBadge type={pair.forward.playerType} userId={pair.forward.userId} />
       </div>
     </div>
   );
@@ -886,23 +979,23 @@ function BracketView({
               <div key={match.position} className={`rounded-lg border p-2 text-xs ${match.isBye ? 'border-dashed border-muted bg-muted/30' : 'border-border bg-card'}`}>
                 <div
                   className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                    match.winnerId === match.pair1Id && match.pair1Id ? 'bg-green-50 font-semibold text-green-800' : ''
+                    match.winnerId === match.pair1Id && match.pair1Id ? 'bg-success/10 font-semibold text-success' : ''
                   } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
                   onClick={() => canSelect && match.pair1Id && onSelectWinner(ri, mi, match.pair1Id)}
                 >
                   <span>{getPairName(match.pair1Id)}</span>
-                  {match.winnerId === match.pair1Id && match.pair1Id && <Check className="h-3 w-3 text-green-600" />}
+                  {match.winnerId === match.pair1Id && match.pair1Id && <Check className="h-3 w-3 text-success" />}
                   {canSelect && !match.winnerId && <span className="text-[9px] text-primary">Elegir</span>}
                 </div>
                 <div className="h-px bg-border my-0.5" />
                 <div
                   className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                    match.winnerId === match.pair2Id && match.pair2Id ? 'bg-green-50 font-semibold text-green-800' : ''
+                    match.winnerId === match.pair2Id && match.pair2Id ? 'bg-success/10 font-semibold text-success' : ''
                   } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
                   onClick={() => canSelect && match.pair2Id && onSelectWinner(ri, mi, match.pair2Id)}
                 >
                   <span>{getPairName(match.pair2Id)}</span>
-                  {match.winnerId === match.pair2Id && match.pair2Id && <Check className="h-3 w-3 text-green-600" />}
+                  {match.winnerId === match.pair2Id && match.pair2Id && <Check className="h-3 w-3 text-success" />}
                   {canSelect && !match.winnerId && <span className="text-[9px] text-primary">Elegir</span>}
                 </div>
               </div>
