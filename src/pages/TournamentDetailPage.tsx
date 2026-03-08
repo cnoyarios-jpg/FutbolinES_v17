@@ -922,6 +922,7 @@ export default function TournamentDetailPage() {
       )}
 
       {/* ENROLLMENT DIALOG */}
+      {showEnrollDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
