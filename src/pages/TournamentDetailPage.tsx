@@ -431,8 +431,63 @@ export default function TournamentDetailPage() {
           </div>
         </div>
       )}
+      {/* CHECK-IN Section */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        const checkInPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
 
-      {/* Parejas inscritas */}
+        return (tournament.status === 'abierto' || tournament.status === 'en_curso') && (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display text-sm font-semibold flex items-center gap-1.5">
+                <ClipboardCheck className="h-4 w-4" /> Check-in
+              </h3>
+              {isOrganizer && (
+                <div className="flex gap-1.5">
+                  {!tournament.checkInOpen ? (
+                    <button onClick={() => { openCheckIn(tournament.id); forceUpdate(n => n + 1); toast.success('Check-in abierto'); }}
+                      className="rounded-lg bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground">Abrir check-in</button>
+                  ) : (
+                    <>
+                      <button onClick={() => { closeCheckIn(tournament.id); forceUpdate(n => n + 1); toast.success('Check-in cerrado'); }}
+                        className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">Cerrar</button>
+                      <button onClick={() => { const count = removeAbsentPairs(tournament.id); forceUpdate(n => n + 1); toast.success(`${count} pareja(s) ausente(s) eliminada(s)`); }}
+                        className="rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive">Eliminar ausentes</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {tournament.checkInOpen ? (
+              <div className="flex flex-col gap-1.5">
+                {checkInPairs.map(p => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs">
+                    <span className="font-medium">{p.goalkeeper.displayName.split(' ')[0]} / {p.forward.displayName.split(' ')[0]}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                        p.checkInStatus === 'confirmado' ? 'bg-success/10 text-success' :
+                        p.checkInStatus === 'ausente' ? 'bg-destructive/10 text-destructive' :
+                        'bg-warning/20 text-warning-foreground'
+                      }`}>{p.checkInStatus === 'confirmado' ? '✓ Confirmado' : p.checkInStatus === 'ausente' ? '✗ Ausente' : '⏳ Pendiente'}</span>
+                      {isOrganizer && p.checkInStatus !== 'confirmado' && (
+                        <>
+                          <button onClick={() => { pairCheckIn(p.id); forceUpdate(n => n + 1); }} className="rounded bg-success/10 px-1.5 py-0.5 text-[9px] text-success font-semibold">✓</button>
+                          <button onClick={() => { markPairAbsent(p.id); forceUpdate(n => n + 1); }} className="rounded bg-destructive/10 px-1.5 py-0.5 text-[9px] text-destructive font-semibold">✗</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">El check-in aún no está abierto.</p>
+            )}
+          </div>
+        );
+      })()}
+
+
       <div className="rounded-xl bg-card p-4 shadow-card mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display text-sm font-semibold">Parejas inscritas ({pairs.length})</h3>
