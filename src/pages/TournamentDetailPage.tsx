@@ -1180,30 +1180,40 @@ function BracketView({
           </p>
           {round.map((match, mi) => {
             const canSelect = !locked && !match.winnerId && !match.isBye && Boolean(match.pair1Id) && Boolean(match.pair2Id);
+            
+            // Si es un bye pero por alguna razón no tiene ganador (no debería pasar, pero por seguridad)
+            const p1 = match.pair1Id;
+            const p2 = match.pair2Id;
 
             return (
               <div key={match.position} className={`rounded-lg border p-2 text-xs ${match.isBye ? 'border-dashed border-muted bg-muted/30' : 'border-border bg-card'}`}>
-                <div
-                  className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                    match.winnerId === match.pair1Id && match.pair1Id ? 'bg-success/10 font-semibold text-success' : ''
-                  } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
-                  onClick={() => canSelect && match.pair1Id && onSelectWinner(ri, mi, match.pair1Id)}
-                >
-                  <span>{getPairName(match.pair1Id)}</span>
-                  {match.winnerId === match.pair1Id && match.pair1Id && <Check className="h-3 w-3 text-success" />}
-                  {canSelect && !match.winnerId && <span className="text-[9px] text-primary">Elegir</span>}
-                </div>
-                <div className="h-px bg-border my-0.5" />
-                <div
-                  className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
-                    match.winnerId === match.pair2Id && match.pair2Id ? 'bg-success/10 font-semibold text-success' : ''
-                  } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
-                  onClick={() => canSelect && match.pair2Id && onSelectWinner(ri, mi, match.pair2Id)}
-                >
-                  <span>{getPairName(match.pair2Id)}</span>
-                  {match.winnerId === match.pair2Id && match.pair2Id && <Check className="h-3 w-3 text-success" />}
-                  {canSelect && !match.winnerId && <span className="text-[9px] text-primary">Elegir</span>}
-                </div>
+                {p1 || p2 ? (
+                  <>
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
+                        match.winnerId === p1 && p1 ? 'bg-success/10 font-semibold text-success' : ''
+                      } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => canSelect && p1 && onSelectWinner(ri, mi, p1)}
+                    >
+                      <span className={!p1 ? 'text-muted-foreground italic' : ''}>{p1 ? getPairName(p1) : 'Bye'}</span>
+                      {match.winnerId === p1 && p1 && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && !match.winnerId && p1 && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                    <div className="h-px bg-border my-0.5" />
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
+                        match.winnerId === p2 && p2 ? 'bg-success/10 font-semibold text-success' : ''
+                      } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => canSelect && p2 && onSelectWinner(ri, mi, p2)}
+                    >
+                      <span className={!p2 ? 'text-muted-foreground italic' : ''}>{p2 ? getPairName(p2) : 'Bye'}</span>
+                      {match.winnerId === p2 && p2 && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && !match.winnerId && p2 && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-3 text-center text-muted-foreground italic text-[10px]">Vacío</div>
+                )}
               </div>
             );
           })}
