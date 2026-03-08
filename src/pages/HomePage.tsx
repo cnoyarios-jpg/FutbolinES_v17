@@ -21,7 +21,7 @@ export default function HomePage() {
         </motion.div>
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.25 }} className="mt-6 grid grid-cols-4 gap-2">
           {[
-            { icon: MapPin, label: 'Mapa', path: '/mapa', color: 'bg-primary-foreground/20' },
+            { icon: MapPin, label: 'Bares', path: '/futbolines', color: 'bg-primary-foreground/20' },
             { icon: Trophy, label: 'Torneos', path: '/torneos', color: 'bg-primary-foreground/20' },
             { icon: BarChart3, label: 'Ranking', path: '/ranking', color: 'bg-primary-foreground/20' },
             { icon: Users, label: 'Equipos', path: '/equipos', color: 'bg-primary-foreground/20' },
