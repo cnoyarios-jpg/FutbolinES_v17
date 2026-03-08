@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_VENUES, MOCK_TABLES, MOCK_TOURNAMENTS, getTableForVenue, getVenueTopPlayers, getVenueAvgLevel, getVenueMostCommonStyle, getVenueVerifications, verifyVenue, getVenueLeagues, createVenueLeague, getLeagueStandings, getCurrentUser } from '@/data/mock';
+import { MOCK_VENUES, MOCK_TABLES, MOCK_TOURNAMENTS, getTableForVenue, getVenueTopPlayers, getVenueAvgLevel, getVenueMostCommonStyle, getVenueVerifications, verifyVenue, getVenueLeagues, createVenueLeague, getLeagueStandings, addTournamentToLeague, getCurrentUser } from '@/data/mock';
 import { MapPin, CheckCircle, AlertTriangle, Clock, Trophy, ArrowLeft, ShieldCheck, ShieldAlert, XCircle, Plus, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 
