@@ -29,6 +29,9 @@ const SEASONS_KEY = 'futbolines_seasons';
 const ACHIEVEMENTS_KEY = 'futbolines_achievements';
 const VENUE_LEAGUES_KEY = 'futbolines_venue_leagues';
 const CORRECTIONS_KEY = 'futbolines_corrections';
+const RANKINGS_OVERRIDES_KEY = 'futbolines_rankings_overrides';
+const TOURNAMENTS_OVERRIDES_KEY = 'futbolines_tournaments_overrides';
+const PAIRS_OVERRIDES_KEY = 'futbolines_pairs_overrides';
 
 export function getRegisteredUsers(): RegisteredUser[] {
   try {
