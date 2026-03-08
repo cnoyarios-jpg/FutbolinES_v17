@@ -206,6 +206,7 @@ export default function TournamentDetailPage() {
     }
 
     resetEnrollDialog();
+    persistPairs();
     toast.success('Pareja inscrita correctamente');
     forceUpdate(n => n + 1);
   };
