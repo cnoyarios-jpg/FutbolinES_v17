@@ -423,6 +423,8 @@ export function setTournamentMVP(tournamentId: string, playerId: string, playerN
 
   // Achievement: MVP
   checkAndGrantAchievement(playerId, 'mvp_tournament');
+  persistRankings();
+  persistTournaments();
 }
 
 export function getTournamentMVPBonus(tournamentId: string): number {
@@ -464,6 +466,7 @@ export function recordTournamentWin(tournamentId: string, winnerPairId: string) 
   });
 
   recordPairHistory(pair.goalkeeper.userId, pair.goalkeeper.displayName, pair.forward.userId, pair.forward.displayName, true);
+  persistRankings();
 }
 
 // ===== PAIR HISTORY =====
@@ -654,8 +657,9 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
     }
     checkAndGrantAchievement(mvpUserId, 'mvp_tournament');
   }
+  persistRankings();
+  persistTournaments();
 }
-
 export function finalizeTournament(tournamentId: string, winnerPairId?: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
   if (!tournament) return;
