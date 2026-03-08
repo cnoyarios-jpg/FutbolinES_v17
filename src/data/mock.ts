@@ -99,6 +99,7 @@ export function ensureRankingEntry(
       preferredPosition, preferredStyle, preferredTable,
       playerType: 'registrado',
     });
+    persistRankings();
   }
 }
 
