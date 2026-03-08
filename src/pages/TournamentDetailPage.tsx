@@ -836,55 +836,31 @@ export default function TournamentDetailPage() {
       })()}
 
       {/* === FINALIZAR TORNEO + MVP === */}
-      {(() => {
-        const currentUser = getCurrentUser();
-        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
-        if (!isOrganizer || isTournamentLocked) return null;
+      {isOrganizer && !isTournamentLocked && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+            <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
+          </h3>
 
-        const allPlayers = pairs.flatMap(p => [
-          { userId: p.goalkeeper.userId, displayName: p.goalkeeper.displayName },
-          { userId: p.forward.userId, displayName: p.forward.displayName },
-        ]);
-        const uniquePlayers = allPlayers.filter((p, i, arr) => arr.findIndex(x => x.userId === p.userId) === i);
+          <p className="text-xs text-muted-foreground mb-3">
+            {canFinalizeTournament
+              ? 'Selecciona MVP y cierra el torneo. Al cerrar se guardan ganador, MVP y estadísticas.'
+              : 'Aún no se puede finalizar: primero debe quedar definida la pareja ganadora.'}
+          </p>
 
-        let winnerPairId: string | undefined;
-        if (isKingMode && kingCourtPairId) {
-          winnerPairId = kingCourtPairId;
-        } else if (isRoundRobin && rrStandings.length > 0) {
-          winnerPairId = rrStandings[0].pairId;
-        } else if (bracket.length > 0) {
-          const finalRound = bracket[bracket.length - 1];
-          if (finalRound && finalRound[0]?.winnerId) winnerPairId = finalRound[0].winnerId;
-        }
-
-        const canFinalize = Boolean(winnerPairId) && uniquePlayers.length > 0;
-
-        return (
-          <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
-            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
-              <Trophy className="h-4 w-4 text-accent" /> Finalizar torneo
-            </h3>
-
-            <p className="text-xs text-muted-foreground mb-3">
-              {canFinalize
-                ? 'Selecciona MVP y cierra el torneo. Al cerrar se guardan ganador, MVP y estadísticas.'
-                : 'Aún no se puede finalizar: primero debe quedar definida la pareja ganadora.'}
-            </p>
-
-            <button
-              onClick={() => {
-                if (!canFinalize) return;
-                setSelectedMvpId(tournament.mvpPlayerId || uniquePlayers[0]?.userId || '');
-                setShowFinalizeDialog(true);
-              }}
-              disabled={!canFinalize}
-              className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              🏆 Finalizar torneo
-            </button>
-          </div>
-        );
-      })()}
+          <button
+            onClick={() => {
+              if (!canFinalizeTournament) return;
+              setSelectedMvpId(tournament.mvpPlayerId || uniqueTournamentPlayers[0]?.userId || '');
+              setShowFinalizeDialog(true);
+            }}
+            disabled={!canFinalizeTournament}
+            className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            🏆 Finalizar torneo
+          </button>
+        </div>
+      )}
 
 
       {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
@@ -896,8 +872,56 @@ export default function TournamentDetailPage() {
         </button>
       )}
 
+      {showFinalizeDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-xl bg-card p-5 shadow-elevated">
+            <h3 className="font-display text-lg font-bold mb-3">Finalizar torneo</h3>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Jugador del torneo (MVP)</label>
+            <select
+              value={selectedMvpId}
+              onChange={e => setSelectedMvpId(e.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Seleccionar MVP...</option>
+              {uniqueTournamentPlayers.map(player => (
+                <option key={player.userId} value={player.userId}>{player.displayName}</option>
+              ))}
+            </select>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setShowFinalizeDialog(false)}
+                className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!finalWinnerPairId) {
+                    toast.error('No hay pareja ganadora definida para finalizar.');
+                    return;
+                  }
+                  const mvpPlayer = uniqueTournamentPlayers.find(p => p.userId === selectedMvpId);
+                  if (!mvpPlayer) {
+                    toast.error('Selecciona un MVP para finalizar.');
+                    return;
+                  }
+                  setTournamentMvp(tournament.id, mvpPlayer.userId, mvpPlayer.displayName);
+                  finalizeTournament(tournament.id, finalWinnerPairId);
+                  setShowFinalizeDialog(false);
+                  forceUpdate(n => n + 1);
+                  toast.success('Torneo finalizado y MVP guardado correctamente.');
+                }}
+                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-foreground"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ENROLLMENT DIALOG */}
-      {showEnrollDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
@@ -1131,11 +1155,13 @@ function BracketView({
   pairs,
   onSelectWinner,
   eloChanges,
+  locked,
 }: {
   rounds: BracketMatch[][];
   pairs: TournamentPair[];
   onSelectWinner: (roundIdx: number, matchIdx: number, winnerId: string) => void;
   eloChanges: EloChangeDisplay[];
+  locked: boolean;
 }) {
   const getPairName = (pairId?: string) => {
     if (!pairId) return '—';
@@ -1152,7 +1178,7 @@ function BracketView({
             {ri === rounds.length - 1 ? 'Final' : `Ronda ${ri + 1}`}
           </p>
           {round.map((match, mi) => {
-            const canSelect = !match.winnerId && !match.isBye && match.pair1Id && match.pair2Id;
+            const canSelect = !locked && !match.winnerId && !match.isBye && Boolean(match.pair1Id) && Boolean(match.pair2Id);
 
             return (
               <div key={match.position} className={`rounded-lg border p-2 text-xs ${match.isBye ? 'border-dashed border-muted bg-muted/30' : 'border-border bg-card'}`}>
