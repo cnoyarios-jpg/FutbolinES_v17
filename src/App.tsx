@@ -52,6 +52,7 @@ const App = () => {
               <Route path="/perfil" element={<ProfilePage onLogout={() => { logoutUser(); setIsLoggedIn(false); }} />} />
               <Route path="/perfil/:userId" element={<ProfilePage />} />
               <Route path="/equipos" element={<TeamsPage />} />
+              <Route path="/equipos/:teamId" element={<TeamsPage />} />
               <Route path="/locales/:id" element={<VenueDetailPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

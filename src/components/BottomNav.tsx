@@ -3,7 +3,7 @@ import { MapPin, Trophy, BarChart3, User, Home } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/', icon: Home, label: 'Inicio' },
-  { path: '/mapa', icon: MapPin, label: 'Mapa' },
+  { path: '/futbolines', icon: MapPin, label: 'Bares' },
   { path: '/torneos', icon: Trophy, label: 'Torneos' },
   { path: '/ranking', icon: BarChart3, label: 'Ranking' },
   { path: '/perfil', icon: User, label: 'Perfil' },

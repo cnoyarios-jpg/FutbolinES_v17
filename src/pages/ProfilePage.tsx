@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS, getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory, getRegisteredUsers } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, Award, X, Handshake } from 'lucide-react';
+import {
+  MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS,
+  getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
+  getRegisteredUsers, getUserAchievements, ACHIEVEMENT_DEFINITIONS
+} from '@/data/mock';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, Award, X, Handshake, Medal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
@@ -69,6 +73,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const partners = getFrequentPartners(targetUserId);
   const topPartner = partners.length > 0 ? partners[0] : null;
   const pairHistory = getPairHistory(targetUserId);
+  const achievements = getUserAchievements(targetUserId);
 
   const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
   const bestStyle = rating ? (rating.byStyle.parado >= rating.byStyle.movimiento ? 'Parado' : 'Movimiento') : null;
@@ -154,6 +159,25 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
             <div><p className="font-display text-xl font-bold text-destructive">{rating.losses}</p><p className="text-[10px] text-muted-foreground">Derrotas</p></div>
             <div><p className="font-display text-xl font-bold">{winrate}%</p><p className="text-[10px] text-muted-foreground">Win Rate</p></div>
             <div><p className="font-display text-xl font-bold text-primary">{rating.tournamentsPlayed}</p><p className="text-[10px] text-muted-foreground">Torneos</p></div>
+          </div>
+        </div>
+      )}
+
+      {/* Achievements */}
+      {(achievements.length > 0 || ACHIEVEMENT_DEFINITIONS.length > 0) && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Medal className="h-4 w-4 text-accent" /> Logros</h3>
+          <div className="flex flex-wrap gap-2">
+            {ACHIEVEMENT_DEFINITIONS.map(def => {
+              const unlocked = achievements.find(a => a.id === def.id);
+              return (
+                <div key={def.id} className={`rounded-lg px-3 py-2 text-center text-xs ${unlocked ? 'bg-accent/10 border border-accent/30' : 'bg-muted opacity-50'}`}>
+                  <span className="text-lg">{def.icon}</span>
+                  <p className="font-semibold mt-0.5">{def.name}</p>
+                  <p className="text-[9px] text-muted-foreground">{def.description}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

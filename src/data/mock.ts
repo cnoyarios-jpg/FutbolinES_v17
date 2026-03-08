@@ -1,4 +1,4 @@
-import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType } from '@/types';
+import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TeamStats, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType, Season, Achievement, AchievementId, PlayerAchievement, VenueLeague, ResultCorrection } from '@/types';
 
 // ===== AUTH STORE =====
 export interface RegisteredUser {
@@ -21,9 +21,14 @@ const CURRENT_USER_KEY = 'futbolines_current_user';
 const VERIFICATIONS_KEY = 'futbolines_verifications';
 const TEAMS_STORAGE_KEY = 'futbolines_teams';
 const TEAM_MEMBERS_KEY = 'futbolines_team_members';
+const TEAM_STATS_KEY = 'futbolines_team_stats';
 const NOTIFICATIONS_KEY = 'futbolines_notifications';
 const PAIR_HISTORY_KEY = 'futbolines_pair_history';
 const GUEST_PLAYERS_KEY = 'futbolines_guests';
+const SEASONS_KEY = 'futbolines_seasons';
+const ACHIEVEMENTS_KEY = 'futbolines_achievements';
+const VENUE_LEAGUES_KEY = 'futbolines_venue_leagues';
+const CORRECTIONS_KEY = 'futbolines_corrections';
 
 export function getRegisteredUsers(): RegisteredUser[] {
   try {
@@ -67,12 +72,10 @@ export function registerUser(data: Omit<RegisteredUser, 'id' | 'createdAt' | 'pl
   users.push(newUser);
   saveRegisteredUsers(users);
   setCurrentUser(newUser);
-  // Auto-add to ranking
   ensureRankingEntry(newUser.id, newUser.displayName, newUser.city, newUser.postalCode, newUser.preferredPosition, newUser.preferredStyle, newUser.preferredTable);
   return { success: true, user: newUser };
 }
 
-/** Ensures a player has a ranking entry. Creates one with ELO 1500 if missing. */
 export function ensureRankingEntry(
   userId: string,
   displayName: string,
@@ -85,20 +88,12 @@ export function ensureRankingEntry(
   const existing = MOCK_RANKINGS.find(r => r.userId === userId);
   if (!existing) {
     MOCK_RANKINGS.push({
-      userId,
-      displayName,
-      city: city || '',
-      postalCode,
-      general: 1500,
-      asGoalkeeper: 1500,
-      asForward: 1500,
-      byTable: {},
-      byStyle: { parado: 1500, movimiento: 1500 },
+      userId, displayName, city: city || '', postalCode,
+      general: 1500, asGoalkeeper: 1500, asForward: 1500,
+      byTable: {}, byStyle: { parado: 1500, movimiento: 1500 },
       wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
       mvpCount: 0, currentStreak: 0, bestStreak: 0,
-      preferredPosition,
-      preferredStyle,
-      preferredTable,
+      preferredPosition, preferredStyle, preferredTable,
       playerType: 'registrado',
     });
   }
@@ -109,7 +104,6 @@ export function loginUser(email: string, password: string): { success: boolean; 
   const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
   if (!user) return { success: false, error: 'Email o contraseña incorrectos.' };
   setCurrentUser(user);
-  // Ensure ranking entry exists on login
   ensureRankingEntry(user.id, user.displayName, user.city, user.postalCode, user.preferredPosition, user.preferredStyle, user.preferredTable);
   return { success: true, user };
 }
@@ -169,15 +163,12 @@ function saveGuestPlayers(guests: GuestPlayer[]) {
 
 export function createGuestPlayer(displayName: string, postalCode?: string): GuestPlayer {
   const guests = getGuestPlayers();
-  // Check if guest already exists
   const existing = guests.find(g => g.displayName.toLowerCase() === displayName.toLowerCase());
   if (existing) return existing;
 
   const guest: GuestPlayer = {
     id: `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    displayName,
-    postalCode,
-    playerType: 'invitado',
+    displayName, postalCode, playerType: 'invitado',
     createdAt: new Date().toISOString().split('T')[0],
   };
   guests.push(guest);
@@ -207,20 +198,13 @@ function canUserVerifyVenue(userId: string, venueId: string): boolean {
 export function verifyVenue(venueId: string, type: VerificationType = 'confirm', comment?: string): { success: boolean; error?: string; verification?: Verification } {
   const user = getCurrentUser();
   if (!user) return { success: false, error: 'Debes iniciar sesión' };
-
   if (!canUserVerifyVenue(user.id, venueId)) {
     return { success: false, error: 'Solo puedes verificar un mismo local una vez por semana' };
   }
-
   const all: Verification[] = JSON.parse(localStorage.getItem(VERIFICATIONS_KEY) || '[]');
   const newVerification: Verification = {
-    id: `ver_${Date.now()}`,
-    venueId,
-    userId: user.id,
-    userName: user.displayName,
-    type,
-    comment,
-    createdAt: new Date().toISOString(),
+    id: `ver_${Date.now()}`, venueId, userId: user.id, userName: user.displayName,
+    type, comment, createdAt: new Date().toISOString(),
   };
   all.push(newVerification);
   localStorage.setItem(VERIFICATIONS_KEY, JSON.stringify(all));
@@ -277,22 +261,27 @@ export function markNotificationRead(notifId: string) {
 export function confirmPairMembership(pairId: string, userId: string, accept: boolean) {
   const pair = MOCK_PAIRS.find(p => p.id === pairId);
   if (!pair) return;
-  if (pair.goalkeeper.userId === userId) {
-    pair.goalkeeperConfirmed = accept ? 'aceptada' : 'rechazada';
-  }
-  if (pair.forward.userId === userId) {
-    pair.forwardConfirmed = accept ? 'aceptada' : 'rechazada';
-  }
-  if (pair.goalkeeperConfirmed === 'aceptada' && pair.forwardConfirmed === 'aceptada') {
-    pair.status = 'confirmada';
-  }
+  if (pair.goalkeeper.userId === userId) pair.goalkeeperConfirmed = accept ? 'aceptada' : 'rechazada';
+  if (pair.forward.userId === userId) pair.forwardConfirmed = accept ? 'aceptada' : 'rechazada';
+  if (pair.goalkeeperConfirmed === 'aceptada' && pair.forwardConfirmed === 'aceptada') pair.status = 'confirmada';
 }
 
 // ===== CHECK-IN =====
 
 export function openCheckIn(tournamentId: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
-  if (tournament) tournament.checkInOpen = true;
+  if (tournament) {
+    tournament.checkInOpen = true;
+    // Set all pairs to pending
+    MOCK_PAIRS.filter(p => p.tournamentId === tournamentId).forEach(p => {
+      if (!p.checkInStatus) p.checkInStatus = 'pendiente';
+    });
+  }
+}
+
+export function closeCheckIn(tournamentId: string) {
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (tournament) tournament.checkInOpen = false;
 }
 
 export function pairCheckIn(pairId: string) {
@@ -305,12 +294,25 @@ export function markPairAbsent(pairId: string) {
   if (pair) pair.checkInStatus = 'ausente';
 }
 
+export function removeAbsentPairs(tournamentId: string): number {
+  let removed = 0;
+  const indices: number[] = [];
+  MOCK_PAIRS.forEach((p, i) => {
+    if (p.tournamentId === tournamentId && p.checkInStatus === 'ausente') {
+      indices.push(i);
+      removed++;
+    }
+  });
+  for (let i = indices.length - 1; i >= 0; i--) {
+    MOCK_PAIRS.splice(indices[i], 1);
+  }
+  return removed;
+}
+
 // ===== TEAMS STORAGE =====
 
 export function getStoredTeams(): Team[] {
-  try {
-    return JSON.parse(localStorage.getItem(TEAMS_STORAGE_KEY) || '[]');
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(TEAMS_STORAGE_KEY) || '[]'); } catch { return []; }
 }
 
 export function saveTeam(team: Team) {
@@ -318,6 +320,27 @@ export function saveTeam(team: Team) {
   teams.push(team);
   localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams));
   MOCK_TEAMS.push(team);
+}
+
+export function updateTeam(teamId: string, updates: Partial<Team>) {
+  const teams = getStoredTeams();
+  const idx = teams.findIndex(t => t.id === teamId);
+  if (idx >= 0) {
+    teams[idx] = { ...teams[idx], ...updates };
+    localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams));
+  }
+  const mockIdx = MOCK_TEAMS.findIndex(t => t.id === teamId);
+  if (mockIdx >= 0) Object.assign(MOCK_TEAMS[mockIdx], updates);
+}
+
+export function deleteTeam(teamId: string) {
+  const teams = getStoredTeams().filter(t => t.id !== teamId);
+  localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams));
+  const idx = MOCK_TEAMS.findIndex(t => t.id === teamId);
+  if (idx >= 0) MOCK_TEAMS.splice(idx, 1);
+  // Remove members
+  const members: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+  localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(members.filter(m => m.teamId !== teamId)));
 }
 
 export function getTeamMembers(teamId: string): TeamMember[] {
@@ -330,8 +353,41 @@ export function getTeamMembers(teamId: string): TeamMember[] {
 export function addTeamMember(member: TeamMember) {
   try {
     const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+    // Avoid duplicates
+    if (all.some(m => m.teamId === member.teamId && m.userId === member.userId)) return;
     all.push(member);
     localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function respondTeamInvite(memberId: string, accept: boolean) {
+  try {
+    const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+    const m = all.find(x => x.id === memberId);
+    if (m) m.status = accept ? 'aceptada' : 'rechazada';
+    localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function getTeamStats(teamId: string): TeamStats {
+  try {
+    const all: TeamStats[] = JSON.parse(localStorage.getItem(TEAM_STATS_KEY) || '[]');
+    return all.find(s => s.teamId === teamId) || { teamId, tournamentsPlayed: 0, tournamentsWon: 0, matchesPlayed: 0, wins: 0, losses: 0 };
+  } catch {
+    return { teamId, tournamentsPlayed: 0, tournamentsWon: 0, matchesPlayed: 0, wins: 0, losses: 0 };
+  }
+}
+
+export function updateTeamStats(teamId: string, updates: Partial<TeamStats>) {
+  try {
+    const all: TeamStats[] = JSON.parse(localStorage.getItem(TEAM_STATS_KEY) || '[]');
+    let existing = all.find(s => s.teamId === teamId);
+    if (!existing) {
+      existing = { teamId, tournamentsPlayed: 0, tournamentsWon: 0, matchesPlayed: 0, wins: 0, losses: 0 };
+      all.push(existing);
+    }
+    Object.assign(existing, updates);
+    localStorage.setItem(TEAM_STATS_KEY, JSON.stringify(all));
   } catch {}
 }
 
@@ -355,6 +411,9 @@ export function setTournamentMVP(tournamentId: string, playerId: string, playerN
     ranking.general += cappedBonus;
     ranking.mvpCount = (ranking.mvpCount || 0) + 1;
   }
+
+  // Achievement: MVP
+  checkAndGrantAchievement(playerId, 'mvp_tournament');
 }
 
 export function getTournamentMVPBonus(tournamentId: string): number {
@@ -377,6 +436,10 @@ export function recordTournamentWin(tournamentId: string, winnerPairId: string) 
       if (ranking) {
         ranking.tournamentsWon = (ranking.tournamentsWon || 0) + 1;
         ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
+        // Achievements
+        if (ranking.tournamentsWon >= 1) checkAndGrantAchievement(userId, 'first_tournament_win');
+        if (ranking.tournamentsWon >= 5) checkAndGrantAchievement(userId, 'five_tournament_wins');
+        if (ranking.tournamentsWon >= 10) checkAndGrantAchievement(userId, 'ten_tournament_wins');
       }
     }
   });
@@ -386,9 +449,7 @@ export function recordTournamentWin(tournamentId: string, winnerPairId: string) 
     [p.goalkeeper.userId, p.forward.userId].forEach(userId => {
       if (!isGuestPlayer(userId)) {
         const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-        if (ranking) {
-          ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
-        }
+        if (ranking) ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
       }
     });
   });
@@ -425,8 +486,7 @@ export function recordPairHistory(gkId: string, gkName: string, fwId: string, fw
     store.push(entry);
   }
   entry.matchesPlayed++;
-  if (won) entry.wins++; else entry.losses++;
-  if (won) entry.tournamentsWon++;
+  if (won) { entry.wins++; entry.tournamentsWon++; } else { entry.losses++; }
   savePairHistoryStore(store);
 }
 
@@ -435,12 +495,24 @@ export function getPairHistory(userId: string): PairHistoryEntry[] {
   return store.filter(e => e.goalkeeperId === userId || e.forwardId === userId);
 }
 
+export function getAllPairRankings(): (PairHistoryEntry & { winrate: number; pairElo: number })[] {
+  const store = getPairHistoryStore();
+  return store
+    .filter(e => e.matchesPlayed > 0)
+    .map(e => {
+      const gkR = MOCK_RANKINGS.find(r => r.userId === e.goalkeeperId);
+      const fwR = MOCK_RANKINGS.find(r => r.userId === e.forwardId);
+      const pairElo = Math.round(((gkR?.general || 1500) + (fwR?.general || 1500)) / 2);
+      return { ...e, winrate: Math.round((e.wins / e.matchesPlayed) * 100), pairElo };
+    })
+    .sort((a, b) => b.pairElo - a.pairElo);
+}
+
 // ===== VENUE STATS =====
 
 export function getVenueTopPlayers(venueId: string, limit: number = 3): { userId: string; displayName: string; elo: number }[] {
   const venueTournaments = MOCK_TOURNAMENTS.filter(t => t.venueId === venueId);
   const playerElos: Record<string, { displayName: string; elo: number }> = {};
-
   venueTournaments.forEach(t => {
     const pairs = MOCK_PAIRS.filter(p => p.tournamentId === t.id);
     pairs.forEach(p => {
@@ -454,11 +526,7 @@ export function getVenueTopPlayers(venueId: string, limit: number = 3): { userId
       });
     });
   });
-
-  return Object.entries(playerElos)
-    .map(([userId, data]) => ({ userId, ...data }))
-    .sort((a, b) => b.elo - a.elo)
-    .slice(0, limit);
+  return Object.entries(playerElos).map(([userId, data]) => ({ userId, ...data })).sort((a, b) => b.elo - a.elo).slice(0, limit);
 }
 
 export function getVenueAvgLevel(venueId: string): number {
@@ -488,20 +556,188 @@ export function getVenueMostCommonStyle(venueId: string): string | null {
   return parado >= movimiento ? 'Parado' : 'Movimiento';
 }
 
+// ===== VENUE RANKINGS =====
+
+export function getVenueRankings(): { venueId: string; name: string; city: string; avgElo: number; tournamentCount: number; playerCount: number }[] {
+  return MOCK_VENUES
+    .filter(v => v.status === 'activo')
+    .map(v => {
+      const tCount = MOCK_TOURNAMENTS.filter(t => t.venueId === v.id).length;
+      const avgElo = getVenueAvgLevel(v.id);
+      const playerIds = new Set<string>();
+      MOCK_TOURNAMENTS.filter(t => t.venueId === v.id).forEach(t => {
+        MOCK_PAIRS.filter(p => p.tournamentId === t.id).forEach(p => {
+          if (!isGuestPlayer(p.goalkeeper.userId)) playerIds.add(p.goalkeeper.userId);
+          if (!isGuestPlayer(p.forward.userId)) playerIds.add(p.forward.userId);
+        });
+      });
+      return { venueId: v.id, name: v.name, city: v.city, avgElo, tournamentCount: tCount, playerCount: playerIds.size };
+    })
+    .sort((a, b) => b.avgElo - a.avgElo);
+}
+
+// ===== SEASONS =====
+
+export function getSeasons(): Season[] {
+  try { return JSON.parse(localStorage.getItem(SEASONS_KEY) || '[]'); } catch { return []; }
+}
+
+export function createSeason(name: string, startDate: string, endDate: string): Season {
+  const seasons = getSeasons();
+  // Deactivate current active
+  seasons.forEach(s => s.isActive = false);
+  const newSeason: Season = { id: `season_${Date.now()}`, name, startDate, endDate, isActive: true };
+  seasons.push(newSeason);
+  localStorage.setItem(SEASONS_KEY, JSON.stringify(seasons));
+  return newSeason;
+}
+
+export function getActiveSeason(): Season | null {
+  return getSeasons().find(s => s.isActive) || null;
+}
+
+// ===== ACHIEVEMENTS =====
+
+export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
+  { id: 'first_tournament_win', name: 'Primera victoria', description: 'Gana tu primer torneo', icon: '🏆' },
+  { id: 'five_tournament_wins', name: 'Pentacampeón', description: 'Gana 5 torneos', icon: '⭐' },
+  { id: 'ten_tournament_wins', name: 'Leyenda', description: 'Gana 10 torneos', icon: '👑' },
+  { id: 'ten_win_streak', name: 'Imparable', description: 'Racha de 10 victorias', icon: '🔥' },
+  { id: 'mvp_tournament', name: 'MVP', description: 'Ser jugador del torneo', icon: '🌟' },
+  { id: 'play_3_venues', name: 'Explorador', description: 'Jugar en 3 bares distintos', icon: '🗺️' },
+  { id: 'play_5_tables', name: 'Versátil', description: 'Jugar en 5 mesas distintas', icon: '🎯' },
+];
+
+function getPlayerAchievements(userId: string): PlayerAchievement[] {
+  try {
+    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
+    return all[userId] || [];
+  } catch { return []; }
+}
+
+function savePlayerAchievement(userId: string, achievementId: AchievementId) {
+  try {
+    const all: Record<string, PlayerAchievement[]> = JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY) || '{}');
+    if (!all[userId]) all[userId] = [];
+    if (all[userId].some(a => a.achievementId === achievementId)) return;
+    all[userId].push({ achievementId, unlockedAt: new Date().toISOString() });
+    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function checkAndGrantAchievement(userId: string, achievementId: AchievementId) {
+  savePlayerAchievement(userId, achievementId);
+}
+
+export function getUserAchievements(userId: string): (Achievement & { unlockedAt: string })[] {
+  const playerAch = getPlayerAchievements(userId);
+  return playerAch.map(pa => {
+    const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === pa.achievementId)!;
+    return { ...def, unlockedAt: pa.unlockedAt };
+  }).filter(Boolean);
+}
+
+// Check streak achievement
+export function checkStreakAchievement(userId: string) {
+  const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+  if (ranking && ranking.currentStreak >= 10) {
+    checkAndGrantAchievement(userId, 'ten_win_streak');
+  }
+}
+
+// Check venue/table achievements
+export function checkVenueTableAchievements(userId: string) {
+  const venueIds = new Set<string>();
+  const tableBrands = new Set<string>();
+  MOCK_TOURNAMENTS.forEach(t => {
+    const userInTournament = MOCK_PAIRS.some(p =>
+      p.tournamentId === t.id && (p.goalkeeper.userId === userId || p.forward.userId === userId)
+    );
+    if (userInTournament) {
+      venueIds.add(t.venueId);
+      tableBrands.add(t.tableBrand);
+    }
+  });
+  if (venueIds.size >= 3) checkAndGrantAchievement(userId, 'play_3_venues');
+  if (tableBrands.size >= 5) checkAndGrantAchievement(userId, 'play_5_tables');
+}
+
+// ===== VENUE LEAGUES =====
+
+export function getVenueLeagues(venueId: string): VenueLeague[] {
+  try {
+    const all: VenueLeague[] = JSON.parse(localStorage.getItem(VENUE_LEAGUES_KEY) || '[]');
+    return all.filter(l => l.venueId === venueId);
+  } catch { return []; }
+}
+
+export function createVenueLeague(venueId: string, name: string): VenueLeague {
+  const all: VenueLeague[] = JSON.parse(localStorage.getItem(VENUE_LEAGUES_KEY) || '[]');
+  const league: VenueLeague = { id: `league_${Date.now()}`, venueId, name, tournamentIds: [], createdAt: new Date().toISOString() };
+  all.push(league);
+  localStorage.setItem(VENUE_LEAGUES_KEY, JSON.stringify(all));
+  return league;
+}
+
+export function addTournamentToLeague(leagueId: string, tournamentId: string) {
+  const all: VenueLeague[] = JSON.parse(localStorage.getItem(VENUE_LEAGUES_KEY) || '[]');
+  const league = all.find(l => l.id === leagueId);
+  if (league && !league.tournamentIds.includes(tournamentId)) {
+    league.tournamentIds.push(tournamentId);
+    localStorage.setItem(VENUE_LEAGUES_KEY, JSON.stringify(all));
+  }
+}
+
+export function getLeagueStandings(leagueId: string): { userId: string; displayName: string; points: number; wins: number; losses: number }[] {
+  const all: VenueLeague[] = JSON.parse(localStorage.getItem(VENUE_LEAGUES_KEY) || '[]');
+  const league = all.find(l => l.id === leagueId);
+  if (!league) return [];
+
+  const playerStats: Record<string, { displayName: string; points: number; wins: number; losses: number }> = {};
+  league.tournamentIds.forEach(tId => {
+    const winnerPairs = MOCK_PAIRS.filter(p => p.tournamentId === tId && p.status === 'ganadora');
+    winnerPairs.forEach(p => {
+      [p.goalkeeper, p.forward].forEach(m => {
+        if (!playerStats[m.userId]) playerStats[m.userId] = { displayName: m.displayName, points: 0, wins: 0, losses: 0 };
+        playerStats[m.userId].points += 3;
+        playerStats[m.userId].wins++;
+      });
+    });
+    MOCK_PAIRS.filter(p => p.tournamentId === tId && p.status !== 'ganadora').forEach(p => {
+      [p.goalkeeper, p.forward].forEach(m => {
+        if (!playerStats[m.userId]) playerStats[m.userId] = { displayName: m.displayName, points: 0, wins: 0, losses: 0 };
+        playerStats[m.userId].points += 1;
+        playerStats[m.userId].losses++;
+      });
+    });
+  });
+
+  return Object.entries(playerStats).map(([userId, data]) => ({ userId, ...data })).sort((a, b) => b.points - a.points);
+}
+
+// ===== RESULT CORRECTIONS =====
+
+export function getCorrections(tournamentId: string): ResultCorrection[] {
+  try {
+    const all: ResultCorrection[] = JSON.parse(localStorage.getItem(CORRECTIONS_KEY) || '[]');
+    return all.filter(c => c.tournamentId === tournamentId);
+  } catch { return []; }
+}
+
+export function saveCorrection(correction: ResultCorrection) {
+  try {
+    const all: ResultCorrection[] = JSON.parse(localStorage.getItem(CORRECTIONS_KEY) || '[]');
+    all.push(correction);
+    localStorage.setItem(CORRECTIONS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
 // ===== MOCK DATA =====
 
 export const MOCK_USER: User = {
-  id: 'u1',
-  email: 'carlos@ejemplo.com',
-  nickname: 'CarlosGK',
-  displayName: 'Carlos García',
-  city: 'Madrid',
-  postalCode: '28001',
-  preferredPosition: 'portero',
-  preferredStyle: 'parado',
-  preferredTable: 'Presas',
-  playerType: 'registrado',
-  createdAt: '2024-01-15',
+  id: 'u1', email: 'carlos@ejemplo.com', nickname: 'CarlosGK', displayName: 'Carlos García',
+  city: 'Madrid', postalCode: '28001', preferredPosition: 'portero', preferredStyle: 'parado',
+  preferredTable: 'Presas', playerType: 'registrado', createdAt: '2024-01-15',
 };
 
 export const MOCK_VENUES: Venue[] = [
@@ -653,18 +889,13 @@ export function findOrCreatePlayer(displayName: string, city: string = '', posit
     else if (position === 'delantero') elo = existing.asForward;
     return { userId: existing.userId, displayName: existing.displayName, elo, playerType: existing.playerType || 'registrado' };
   }
-  // Check guest players
   const guests = getGuestPlayers();
   const existingGuest = guests.find(g => g.displayName.toLowerCase() === displayName.toLowerCase());
-  if (existingGuest) {
-    return { userId: existingGuest.id, displayName: existingGuest.displayName, elo: 1500, playerType: 'invitado' };
-  }
-  // Create as guest by default when not found
+  if (existingGuest) return { userId: existingGuest.id, displayName: existingGuest.displayName, elo: 1500, playerType: 'invitado' };
   const guest = createGuestPlayer(displayName);
   return { userId: guest.id, displayName: guest.displayName, elo: 1500, playerType: 'invitado' };
 }
 
-/** Create or find a registered player for enrollment */
 export function findOrCreateRegisteredPlayer(displayName: string, city: string = '', position?: Position): { userId: string; displayName: string; elo: number; playerType: PlayerType } {
   const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
   if (existing) {
@@ -680,8 +911,7 @@ export function findOrCreateRegisteredPlayer(displayName: string, city: string =
     general: BASE_ELO, asGoalkeeper: BASE_ELO, asForward: BASE_ELO,
     byTable: {}, byStyle: { parado: BASE_ELO, movimiento: BASE_ELO },
     wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
-    mvpCount: 0, currentStreak: 0, bestStreak: 0,
-    playerType: 'registrado',
+    mvpCount: 0, currentStreak: 0, bestStreak: 0, playerType: 'registrado',
   });
   return { userId: newUserId, displayName, elo: BASE_ELO, playerType: 'registrado' };
 }
@@ -700,7 +930,5 @@ export function getFrequentPartners(userId: string): { partnerId: string; partne
       partnerMap[key].count++;
     }
   });
-  return Object.entries(partnerMap)
-    .map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count }))
-    .sort((a, b) => b.count - a.count);
+  return Object.entries(partnerMap).map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count })).sort((a, b) => b.count - a.count);
 }

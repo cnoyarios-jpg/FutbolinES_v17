@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer } from '@/data/mock';
-import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus } from 'lucide-react';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements } from '@/data/mock';
+import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
 import { toast } from 'sonner';
@@ -431,8 +431,63 @@ export default function TournamentDetailPage() {
           </div>
         </div>
       )}
+      {/* CHECK-IN Section */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        const checkInPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
 
-      {/* Parejas inscritas */}
+        return (tournament.status === 'abierto' || tournament.status === 'en_curso') && (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display text-sm font-semibold flex items-center gap-1.5">
+                <ClipboardCheck className="h-4 w-4" /> Check-in
+              </h3>
+              {isOrganizer && (
+                <div className="flex gap-1.5">
+                  {!tournament.checkInOpen ? (
+                    <button onClick={() => { openCheckIn(tournament.id); forceUpdate(n => n + 1); toast.success('Check-in abierto'); }}
+                      className="rounded-lg bg-success px-3 py-1.5 text-xs font-semibold text-success-foreground">Abrir check-in</button>
+                  ) : (
+                    <>
+                      <button onClick={() => { closeCheckIn(tournament.id); forceUpdate(n => n + 1); toast.success('Check-in cerrado'); }}
+                        className="rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">Cerrar</button>
+                      <button onClick={() => { const count = removeAbsentPairs(tournament.id); forceUpdate(n => n + 1); toast.success(`${count} pareja(s) ausente(s) eliminada(s)`); }}
+                        className="rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive">Eliminar ausentes</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {tournament.checkInOpen ? (
+              <div className="flex flex-col gap-1.5">
+                {checkInPairs.map(p => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs">
+                    <span className="font-medium">{p.goalkeeper.displayName.split(' ')[0]} / {p.forward.displayName.split(' ')[0]}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                        p.checkInStatus === 'confirmado' ? 'bg-success/10 text-success' :
+                        p.checkInStatus === 'ausente' ? 'bg-destructive/10 text-destructive' :
+                        'bg-warning/20 text-warning-foreground'
+                      }`}>{p.checkInStatus === 'confirmado' ? '✓ Confirmado' : p.checkInStatus === 'ausente' ? '✗ Ausente' : '⏳ Pendiente'}</span>
+                      {isOrganizer && p.checkInStatus !== 'confirmado' && (
+                        <>
+                          <button onClick={() => { pairCheckIn(p.id); forceUpdate(n => n + 1); }} className="rounded bg-success/10 px-1.5 py-0.5 text-[9px] text-success font-semibold">✓</button>
+                          <button onClick={() => { markPairAbsent(p.id); forceUpdate(n => n + 1); }} className="rounded bg-destructive/10 px-1.5 py-0.5 text-[9px] text-destructive font-semibold">✗</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">El check-in aún no está abierto.</p>
+            )}
+          </div>
+        );
+      })()}
+
+
       <div className="rounded-xl bg-card p-4 shadow-card mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display text-sm font-semibold">Parejas inscritas ({pairs.length})</h3>
@@ -707,7 +762,42 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
-      {/* CTA */}
+      {/* Result Corrections */}
+      {(() => {
+        const currentUser = getCurrentUser();
+        const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+        const corrections = getCorrections(tournament.id);
+        if (!isOrganizer && corrections.length === 0) return null;
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <RotateCcw className="h-4 w-4" /> Correcciones de resultados
+            </h3>
+            {isOrganizer && eloChanges.length > 0 && (
+              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> Puedes revertir resultados seleccionando un nuevo ganador en el bracket o partidos.
+              </p>
+            )}
+            {corrections.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {corrections.map((c, i) => (
+                  <div key={i} className="rounded-lg bg-muted p-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Partido {c.matchKey}</span>
+                      <span className="text-muted-foreground">{new Date(c.date).toLocaleDateString('es-ES')}</span>
+                    </div>
+                    {c.reason && <p className="text-muted-foreground mt-0.5">{c.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No hay correcciones registradas.</p>
+            )}
+          </div>
+        );
+      })()}
+
+
       {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
         <button
           onClick={() => setShowEnrollDialog(true)}
