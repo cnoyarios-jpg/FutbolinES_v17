@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer } from '@/data/mock';
-import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus } from 'lucide-react';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements } from '@/data/mock';
+import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
 import { toast } from 'sonner';
