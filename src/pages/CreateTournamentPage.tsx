@@ -13,8 +13,6 @@ const FORMATS: { key: TournamentFormat; label: string }[] = [
   { key: 'eliminacion_doble', label: 'Eliminación doble' },
   { key: 'round_robin', label: 'Round Robin / Liguilla' },
   { key: 'grupos_cuadro', label: 'Grupos + Cuadro final' },
-  { key: 'suizo', label: 'Sistema suizo' },
-  { key: 'americano', label: 'Americano' },
   { key: 'rey_mesa', label: 'Rey de la mesa' },
 ];
 const PAIRING_MODES: { key: PairingMode; label: string; desc: string }[] = [
