@@ -1030,6 +1030,7 @@ export function findOrCreateRegisteredPlayer(displayName: string, city: string =
     wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
     mvpCount: 0, currentStreak: 0, bestStreak: 0, playerType: 'registrado',
   });
+  persistRankings();
   return { userId: newUserId, displayName, elo: BASE_ELO, playerType: 'registrado' };
 }
 
