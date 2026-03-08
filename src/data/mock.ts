@@ -289,12 +289,12 @@ export function openCheckIn(tournamentId: string) {
 
 export function closeCheckIn(tournamentId: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
-  if (tournament) tournament.checkInOpen = false;
+  if (tournament) { tournament.checkInOpen = false; persistTournaments(); }
 }
 
 export function pairCheckIn(pairId: string) {
   const pair = MOCK_PAIRS.find(p => p.id === pairId);
-  if (pair) pair.checkInStatus = 'confirmado';
+  if (pair) { pair.checkInStatus = 'confirmado'; persistPairs(); }
 }
 
 export function markPairAbsent(pairId: string) {
