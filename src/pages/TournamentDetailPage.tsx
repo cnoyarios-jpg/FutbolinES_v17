@@ -380,6 +380,7 @@ export default function TournamentDetailPage() {
   };
 
   const rrStandings = isRoundRobin ? calculateRoundRobinStandings(MOCK_PAIRS.filter(p => p.tournamentId === id), rrMatches) : [];
+  const isTournamentLocked = tournament.status === 'finalizado' || tournament.status === 'cancelado';
   const kingFinished = isKingMode && !kingCurrentChallenger && kingHistory.length > 0;
 
   return (
