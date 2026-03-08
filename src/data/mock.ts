@@ -269,6 +269,7 @@ export function confirmPairMembership(pairId: string, userId: string, accept: bo
   if (pair.goalkeeper.userId === userId) pair.goalkeeperConfirmed = accept ? 'aceptada' : 'rechazada';
   if (pair.forward.userId === userId) pair.forwardConfirmed = accept ? 'aceptada' : 'rechazada';
   if (pair.goalkeeperConfirmed === 'aceptada' && pair.forwardConfirmed === 'aceptada') pair.status = 'confirmada';
+  persistPairs();
 }
 
 // ===== CHECK-IN =====
