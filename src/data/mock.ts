@@ -884,6 +884,71 @@ export const MOCK_RANKINGS: (PlayerRating & { displayName: string; city: string;
   { userId: 'u8', displayName: 'Elena Torres', city: 'Barcelona', postalCode: '08002', general: 1650, asGoalkeeper: 1600, asForward: 1700, byTable: { Tsunami: 1680 }, byStyle: { parado: 1630, movimiento: 1670 }, wins: 70, losses: 60, tournamentsPlayed: 16, tournamentsWon: 1, mvpCount: 0, currentStreak: 2, bestStreak: 3, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
 ];
 
+// ===== PERSISTENCE LAYER =====
+// Apply saved overrides from localStorage on module load
+
+export function persistRankings() {
+  localStorage.setItem(RANKINGS_OVERRIDES_KEY, JSON.stringify(MOCK_RANKINGS));
+}
+
+export function persistTournaments() {
+  localStorage.setItem(TOURNAMENTS_OVERRIDES_KEY, JSON.stringify(MOCK_TOURNAMENTS));
+}
+
+export function persistPairs() {
+  localStorage.setItem(PAIRS_OVERRIDES_KEY, JSON.stringify(MOCK_PAIRS));
+}
+
+// Restore rankings overrides
+try {
+  const savedRankings = localStorage.getItem(RANKINGS_OVERRIDES_KEY);
+  if (savedRankings) {
+    const parsed = JSON.parse(savedRankings);
+    if (Array.isArray(parsed)) {
+      // Merge: update existing entries + add new ones
+      parsed.forEach((saved: typeof MOCK_RANKINGS[0]) => {
+        const idx = MOCK_RANKINGS.findIndex(r => r.userId === saved.userId);
+        if (idx >= 0) {
+          Object.assign(MOCK_RANKINGS[idx], saved);
+        } else {
+          MOCK_RANKINGS.push(saved);
+        }
+      });
+    }
+  }
+} catch {}
+
+// Restore tournament overrides
+try {
+  const savedTournaments = localStorage.getItem(TOURNAMENTS_OVERRIDES_KEY);
+  if (savedTournaments) {
+    const parsed = JSON.parse(savedTournaments);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((saved: Tournament) => {
+        const idx = MOCK_TOURNAMENTS.findIndex(t => t.id === saved.id);
+        if (idx >= 0) {
+          Object.assign(MOCK_TOURNAMENTS[idx], saved);
+        } else {
+          MOCK_TOURNAMENTS.push(saved);
+        }
+      });
+    }
+  }
+} catch {}
+
+// Restore pairs overrides
+try {
+  const savedPairs = localStorage.getItem(PAIRS_OVERRIDES_KEY);
+  if (savedPairs) {
+    const parsed = JSON.parse(savedPairs);
+    if (Array.isArray(parsed)) {
+      // Replace entire pairs array content
+      MOCK_PAIRS.length = 0;
+      parsed.forEach((p: TournamentPair) => MOCK_PAIRS.push(p));
+    }
+  }
+} catch {}
+
 export const MOCK_TEAMS: Team[] = [
   { id: 'team1', name: 'Madrid Futbolín Club', city: 'Madrid', captainId: 'u1', elo: 1820, description: 'El equipo de referencia en Madrid', createdAt: '2025-01-01' },
   { id: 'team2', name: 'BCN Foosballers', city: 'Barcelona', captainId: 'u2', elo: 1790, description: 'Pasión por el futbolín en Barcelona', createdAt: '2025-02-15' },
