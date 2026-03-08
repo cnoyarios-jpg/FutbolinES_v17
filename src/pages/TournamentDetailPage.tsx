@@ -262,6 +262,7 @@ export default function TournamentDetailPage() {
       recordPairHistory(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserPair.forward.userId, loserPair.forward.displayName, false);
 
       setEloChanges(prev => [...prev, { matchKey, changes }]);
+      persistRankings();
       toast.success('Ganador registrado. ELO actualizado.');
     }
   }, [id]);
