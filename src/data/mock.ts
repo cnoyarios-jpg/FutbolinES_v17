@@ -314,6 +314,7 @@ export function removeAbsentPairs(tournamentId: string): number {
   for (let i = indices.length - 1; i >= 0; i--) {
     MOCK_PAIRS.splice(indices[i], 1);
   }
+  persistPairs();
   return removed;
 }
 
