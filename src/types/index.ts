@@ -155,7 +155,6 @@ export interface Match {
   venueId: string;
   confirmedBy: string[];
   createdAt: string;
-  // Best of 3 support
   games?: { score1: number; score2: number; winnerId: string }[];
   corrected?: boolean;
   correctedBy?: string;
@@ -201,6 +200,8 @@ export interface Team {
   name: string;
   logoUrl?: string;
   city: string;
+  postalCode?: string;
+  venueId?: string;
   description?: string;
   captainId: string;
   elo: number;
@@ -214,6 +215,16 @@ export interface TeamMember {
   displayName: string;
   role: TeamRole;
   joinedAt: string;
+  status?: 'pendiente' | 'aceptada' | 'rechazada';
+}
+
+export interface TeamStats {
+  teamId: string;
+  tournamentsPlayed: number;
+  tournamentsWon: number;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
 }
 
 // ===== NOTIFICATIONS =====
@@ -260,4 +271,61 @@ export interface PairHistoryRecord {
   tournamentsWon: number;
   bestTable?: TableBrand;
   bestStyle?: PlayStyle;
+}
+
+// ===== SEASONS =====
+
+export interface Season {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+}
+
+// ===== ACHIEVEMENTS =====
+
+export type AchievementId =
+  | 'first_tournament_win'
+  | 'five_tournament_wins'
+  | 'ten_tournament_wins'
+  | 'ten_win_streak'
+  | 'mvp_tournament'
+  | 'play_3_venues'
+  | 'play_5_tables';
+
+export interface Achievement {
+  id: AchievementId;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface PlayerAchievement {
+  achievementId: AchievementId;
+  unlockedAt: string;
+}
+
+// ===== VENUE LEAGUES =====
+
+export interface VenueLeague {
+  id: string;
+  venueId: string;
+  name: string;
+  seasonId?: string;
+  tournamentIds: string[];
+  createdAt: string;
+}
+
+// ===== RESULT CORRECTION =====
+
+export interface ResultCorrection {
+  id: string;
+  tournamentId: string;
+  matchKey: string;
+  correctedBy: string;
+  previousWinnerId: string;
+  newWinnerId: string;
+  reason?: string;
+  date: string;
 }
