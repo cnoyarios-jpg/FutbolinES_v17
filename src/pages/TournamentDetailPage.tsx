@@ -247,10 +247,19 @@ export default function TournamentDetailPage() {
       const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
       const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
       const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
-      if (wGk) wGk.wins++;
-      if (wFw) wFw.wins++;
-      if (lGk) lGk.losses++;
-      if (lFw) lFw.losses++;
+      if (wGk) { wGk.wins++; wGk.currentStreak = (wGk.currentStreak || 0) + 1; wGk.bestStreak = Math.max(wGk.bestStreak || 0, wGk.currentStreak); }
+      if (wFw) { wFw.wins++; wFw.currentStreak = (wFw.currentStreak || 0) + 1; wFw.bestStreak = Math.max(wFw.bestStreak || 0, wFw.currentStreak); }
+      if (lGk) { lGk.losses++; lGk.currentStreak = 0; }
+      if (lFw) { lFw.losses++; lFw.currentStreak = 0; }
+
+      // Check streak achievements
+      [winnerPair.goalkeeper.userId, winnerPair.forward.userId].forEach(uid => {
+        if (!isGuestPlayer(uid)) checkStreakAchievement(uid);
+      });
+
+      // Record pair history
+      recordPairHistory(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerPair.forward.userId, winnerPair.forward.displayName, true);
+      recordPairHistory(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserPair.forward.userId, loserPair.forward.displayName, false);
 
       setEloChanges(prev => [...prev, { matchKey, changes }]);
       toast.success('Ganador registrado. ELO actualizado.');
