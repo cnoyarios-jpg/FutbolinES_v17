@@ -299,7 +299,7 @@ export function pairCheckIn(pairId: string) {
 
 export function markPairAbsent(pairId: string) {
   const pair = MOCK_PAIRS.find(p => p.id === pairId);
-  if (pair) pair.checkInStatus = 'ausente';
+  if (pair) { pair.checkInStatus = 'ausente'; persistPairs(); }
 }
 
 export function removeAbsentPairs(tournamentId: string): number {
