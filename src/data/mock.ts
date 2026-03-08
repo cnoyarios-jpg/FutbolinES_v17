@@ -144,6 +144,7 @@ export function updateUserPreferences(updates: { preferredPosition?: Position; p
     if (updates.preferredPosition) ranking.preferredPosition = updates.preferredPosition;
     if (updates.preferredStyle) ranking.preferredStyle = updates.preferredStyle;
     if (updates.preferredTable) ranking.preferredTable = updates.preferredTable;
+    persistRankings();
   }
 }
 
