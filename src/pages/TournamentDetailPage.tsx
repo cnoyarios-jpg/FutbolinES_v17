@@ -705,7 +705,7 @@ export default function TournamentDetailPage() {
           </h3>
           <div className="flex flex-col gap-2">
             {rrMatches.map(match => {
-              const canSelect = !match.played;
+              const canSelect = !isTournamentLocked && !match.played;
               return (
                 <div key={match.id} className={`rounded-lg border p-3 text-xs ${match.played ? 'border-border bg-muted/30' : 'border-border bg-card'}`}>
                   <div
@@ -749,6 +749,7 @@ export default function TournamentDetailPage() {
               pairs={MOCK_PAIRS.filter(p => p.tournamentId === id)}
               onSelectWinner={handleSelectWinner}
               eloChanges={eloChanges}
+              locked={isTournamentLocked}
             />
           </div>
         </div>
