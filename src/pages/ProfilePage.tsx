@@ -1,31 +1,130 @@
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users } from 'lucide-react';
+import { MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS, getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory, getRegisteredUsers } from '@/data/mock';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, Award, X, Handshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Position, TableBrand } from '@/types';
+import { toast } from 'sonner';
 
-export default function ProfilePage() {
-  const user = MOCK_USER;
-  const rating = MOCK_RANKINGS.find(r => r.userId === user.id);
-  const teams = MOCK_TEAMS.filter(t => t.captainId === user.id);
+const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
+
+interface ProfilePageProps {
+  onLogout?: () => void;
+}
+
+export default function ProfilePage({ onLogout }: ProfilePageProps) {
+  const { userId } = useParams();
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  const isOwnProfile = !userId;
+  const currentUser = getCurrentUser();
+
+  let rating: typeof MOCK_RANKINGS[0] | undefined;
+  let displayName: string;
+  let city: string;
+  let postalCode: string | undefined;
+  let preferredPosition: string | undefined;
+  let preferredStyle: string | undefined;
+  let preferredTable: string | undefined;
+  let playerType: string | undefined;
+  const targetUserId = userId || currentUser?.id || MOCK_USER.id;
+
+  if (userId) {
+    rating = MOCK_RANKINGS.find(r => r.userId === userId);
+    displayName = rating?.displayName || 'Usuario';
+    city = rating?.city || '';
+    postalCode = rating?.postalCode;
+    preferredPosition = rating?.preferredPosition;
+    preferredStyle = rating?.preferredStyle;
+    preferredTable = rating?.preferredTable;
+    playerType = rating?.playerType;
+    if (!preferredPosition) {
+      const regUser = getRegisteredUsers().find(u => u.id === userId);
+      if (regUser) {
+        preferredPosition = regUser.preferredPosition;
+        preferredStyle = regUser.preferredStyle;
+        preferredTable = regUser.preferredTable;
+        postalCode = regUser.postalCode;
+        playerType = regUser.playerType;
+      }
+    }
+  } else {
+    const user = currentUser ? { ...MOCK_USER, id: currentUser.id, displayName: currentUser.displayName, city: currentUser.city, postalCode: currentUser.postalCode, preferredPosition: currentUser.preferredPosition, preferredStyle: currentUser.preferredStyle, preferredTable: currentUser.preferredTable, playerType: currentUser.playerType } : MOCK_USER;
+    rating = MOCK_RANKINGS.find(r => r.userId === user.id);
+    displayName = user.displayName;
+    city = user.city || '';
+    postalCode = user.postalCode;
+    preferredPosition = user.preferredPosition;
+    preferredStyle = user.preferredStyle;
+    preferredTable = user.preferredTable;
+    playerType = user.playerType;
+  }
+
+  const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
+  const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
+  const rankPosition = sortedRankings.findIndex(r => r.userId === targetUserId) + 1;
+  const partners = getFrequentPartners(targetUserId);
+  const topPartner = partners.length > 0 ? partners[0] : null;
+  const pairHistory = getPairHistory(targetUserId);
+
+  const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
+  const bestStyle = rating ? (rating.byStyle.parado >= rating.byStyle.movimiento ? 'Parado' : 'Movimiento') : null;
+  const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
+  const mvpTournaments = MOCK_TOURNAMENTS.filter(t => t.mvpPlayerId === targetUserId);
+
+  const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
+    if (t.status !== 'finalizado') return false;
+    const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === t.id && p.status === 'ganadora');
+    return tPairs.some(p => p.goalkeeper.userId === targetUserId || p.forward.userId === targetUserId);
+  });
+
+  const [editPosition, setEditPosition] = useState<Position>(currentUser?.preferredPosition || 'portero');
+  const [editStyle, setEditStyle] = useState<'parado' | 'movimiento'>(currentUser?.preferredStyle || 'parado');
+  const [editTable, setEditTable] = useState<TableBrand>(currentUser?.preferredTable || 'Presas');
+
+  const handleSavePreferences = () => {
+    updateUserPreferences({ preferredPosition: editPosition, preferredStyle: editStyle, preferredTable: editTable });
+    toast.success('Preferencias actualizadas');
+    setShowEditDialog(false);
+    forceUpdate(n => n + 1);
+  };
 
   return (
     <PageShell>
+      {!isOwnProfile && (
+        <div className="mb-4">
+          <Link to="/ranking" className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground transition active:scale-95">
+            <ArrowLeft className="h-4 w-4" /> Volver al ranking
+          </Link>
+        </div>
+      )}
+
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 font-display text-2xl font-bold text-primary">
-            {user.displayName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            {displayName.split(' ').map(n => n[0]).join('').slice(0, 2)}
           </div>
           <div>
-            <h1 className="font-display text-xl font-bold">{user.displayName}</h1>
-            <p className="text-sm text-muted-foreground">{user.city}</p>
-            <div className="mt-1 flex gap-1.5">
-              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary capitalize">{user.preferredPosition}</span>
-              <span className="rounded-md bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground capitalize">{user.preferredStyle}</span>
+            <h1 className="font-display text-xl font-bold">{displayName}</h1>
+            <p className="text-sm text-muted-foreground">{city}{postalCode ? ` · CP ${postalCode}` : ''}</p>
+            {rankPosition > 0 && <p className="text-xs text-primary font-semibold">#{rankPosition} en el ranking</p>}
+            <div className="mt-1 flex gap-1.5 flex-wrap">
+              {playerType && <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${playerType === 'registrado' ? 'bg-success/10 text-success' : 'bg-warning/20 text-warning-foreground'}`}>{playerType === 'registrado' ? '✓ Registrado' : '👤 Invitado'}</span>}
+              {preferredPosition && <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary capitalize">{preferredPosition}</span>}
+              {preferredStyle && <span className="rounded-md bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground capitalize">{preferredStyle}</span>}
+              {preferredTable && <span className="rounded-md bg-secondary/10 px-2 py-0.5 text-[10px] font-semibold text-secondary capitalize">{preferredTable}</span>}
             </div>
           </div>
         </div>
-        <button className="rounded-lg bg-muted p-2"><Settings className="h-5 w-5 text-muted-foreground" /></button>
+        {isOwnProfile && (
+          <div className="flex gap-1.5">
+            <button onClick={() => { setEditPosition(currentUser?.preferredPosition || 'portero'); setEditStyle(currentUser?.preferredStyle || 'parado'); setEditTable(currentUser?.preferredTable || 'Presas'); setShowEditDialog(true); }} className="rounded-lg bg-muted p-2"><Settings className="h-5 w-5 text-muted-foreground" /></button>
+            {onLogout && <button onClick={onLogout} className="rounded-lg bg-destructive/10 p-2"><LogOut className="h-5 w-5 text-destructive" /></button>}
+          </div>
+        )}
       </div>
 
       {rating && (
@@ -50,10 +149,99 @@ export default function ProfilePage() {
 
       {rating && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div><p className="font-display text-xl font-bold text-green-600">{rating.wins}</p><p className="text-[10px] text-muted-foreground">Victorias</p></div>
-            <div><p className="font-display text-xl font-bold text-red-500">{rating.losses}</p><p className="text-[10px] text-muted-foreground">Derrotas</p></div>
+          <div className="grid grid-cols-4 gap-4 text-center">
+            <div><p className="font-display text-xl font-bold text-success">{rating.wins}</p><p className="text-[10px] text-muted-foreground">Victorias</p></div>
+            <div><p className="font-display text-xl font-bold text-destructive">{rating.losses}</p><p className="text-[10px] text-muted-foreground">Derrotas</p></div>
             <div><p className="font-display text-xl font-bold">{winrate}%</p><p className="text-[10px] text-muted-foreground">Win Rate</p></div>
+            <div><p className="font-display text-xl font-bold text-primary">{rating.tournamentsPlayed}</p><p className="text-[10px] text-muted-foreground">Torneos</p></div>
+          </div>
+        </div>
+      )}
+
+      {rating && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Star className="h-4 w-4 text-accent" /> Estadísticas avanzadas</h3>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-lg bg-muted p-2.5">
+              <p className="text-muted-foreground">Torneos ganados</p>
+              <p className="font-display text-lg font-bold">{rating.tournamentsWon}</p>
+            </div>
+            <div className="rounded-lg bg-muted p-2.5">
+              <p className="text-muted-foreground">Jugador del torneo</p>
+              <p className="font-display text-lg font-bold flex items-center gap-1"><Award className="h-4 w-4 text-accent" />{rating.mvpCount || 0}</p>
+            </div>
+            <div className="rounded-lg bg-muted p-2.5">
+              <p className="text-muted-foreground">Racha actual</p>
+              <p className="font-display text-lg font-bold flex items-center gap-1"><Flame className="h-4 w-4 text-secondary" />{rating.currentStreak || 0}</p>
+            </div>
+            <div className="rounded-lg bg-muted p-2.5">
+              <p className="text-muted-foreground">Mejor racha</p>
+              <p className="font-display text-lg font-bold">{rating.bestStreak || 0}</p>
+            </div>
+            {bestPosition && (
+              <div className="rounded-lg bg-muted p-2.5">
+                <p className="text-muted-foreground">Mejor posición</p>
+                <p className="font-semibold">{bestPosition}</p>
+              </div>
+            )}
+            {bestStyle && (
+              <div className="rounded-lg bg-muted p-2.5">
+                <p className="text-muted-foreground">Mejor modo</p>
+                <p className="font-semibold">{bestStyle}</p>
+              </div>
+            )}
+            {bestTable && (
+              <div className="rounded-lg bg-muted p-2.5 col-span-2">
+                <p className="text-muted-foreground">Mejor mesa</p>
+                <p className="font-semibold">{bestTable[0]} (ELO: {bestTable[1]})</p>
+              </div>
+            )}
+            {topPartner && (
+              <div className="rounded-lg bg-muted p-2.5 col-span-2">
+                <p className="text-muted-foreground">Compañero/a más frecuente</p>
+                <p className="font-semibold">{topPartner.partnerName} ({topPartner.count} veces)</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {pairHistory.length > 0 && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Handshake className="h-4 w-4 text-primary" /> Historial de parejas</h3>
+          <div className="flex flex-col gap-2">
+            {pairHistory.map((ph, i) => {
+              const partnerName = ph.goalkeeperId === targetUserId ? ph.forwardName : ph.goalkeeperName;
+              const wr = ph.matchesPlayed > 0 ? Math.round((ph.wins / ph.matchesPlayed) * 100) : 0;
+              return (
+                <div key={i} className="rounded-lg bg-muted p-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{partnerName}</span>
+                    <span className="text-muted-foreground">{ph.matchesPlayed} partidos</span>
+                  </div>
+                  <div className="flex gap-3 mt-1 text-muted-foreground">
+                    <span className="text-success">{ph.wins}V</span>
+                    <span className="text-destructive">{ph.losses}D</span>
+                    <span>{wr}% WR</span>
+                    {ph.tournamentsWon > 0 && <span className="text-accent-foreground">🏆 {ph.tournamentsWon}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {mvpTournaments.length > 0 && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Award className="h-4 w-4 text-accent" /> Jugador del torneo</h3>
+          <div className="flex flex-col gap-2">
+            {mvpTournaments.map(t => (
+              <Link key={t.id} to={`/torneos/${t.id}`} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs hover:bg-muted/80 transition">
+                <span className="font-semibold">{t.name}</span>
+                <span className="text-muted-foreground">{new Date(t.date).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}
@@ -61,19 +249,60 @@ export default function ProfilePage() {
       {teams.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-base font-bold flex items-center gap-1.5"><Users className="h-4 w-4" /> Mis equipos</h2>
+            <h2 className="font-display text-base font-bold flex items-center gap-1.5"><Users className="h-4 w-4" /> {isOwnProfile ? 'Mis equipos' : 'Equipos'}</h2>
             <Link to="/equipos" className="text-xs font-semibold text-primary">Ver todos</Link>
           </div>
           <div className="flex flex-col gap-2">
             {teams.map(team => (
               <div key={team.id} className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{team.name}</p>
-                  <p className="text-xs text-muted-foreground">{team.city}</p>
-                </div>
+                <div className="flex-1 min-w-0"><p className="font-semibold truncate">{team.name}</p><p className="text-xs text-muted-foreground">{team.city}</p></div>
                 <p className="font-display text-lg font-bold text-primary">{team.elo}</p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {showEditDialog && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Editar preferencias</h3>
+              <button onClick={() => setShowEditDialog(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Posición preferida</label>
+                <div className="flex gap-2">
+                  {(['portero', 'delantero'] as Position[]).map(p => (
+                    <button key={p} onClick={() => setEditPosition(p)}
+                      className={`flex-1 rounded-lg border p-2 text-center text-xs font-semibold capitalize transition ${editPosition === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{p}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Estilo de juego</label>
+                <div className="flex gap-2">
+                  {(['parado', 'movimiento'] as const).map(s => (
+                    <button key={s} onClick={() => setEditStyle(s)}
+                      className={`flex-1 rounded-lg border p-2 text-center text-xs font-semibold capitalize transition ${editStyle === s ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Mesa preferida</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TABLE_BRANDS.map(brand => (
+                    <button key={brand} onClick={() => setEditTable(brand)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${editTable === brand ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{brand}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowEditDialog(false)} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={handleSavePreferences} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground">Guardar</button>
+            </div>
           </div>
         </div>
       )}
