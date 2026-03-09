@@ -1284,3 +1284,175 @@ export function getFrequentPartners(userId: string): { partnerId: string; partne
   });
   return Object.entries(partnerMap).map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count })).sort((a, b) => b.count - a.count);
 }
+
+// ===== TEAM MATCHES & LEAGUES =====
+
+const TEAM_MATCHES_KEY = 'futbolines_team_matches';
+const TEAM_LEAGUES_KEY = 'futbolines_team_leagues';
+
+export function getTeamMatches(): TeamMatch[] {
+  try { return JSON.parse(localStorage.getItem(TEAM_MATCHES_KEY) || '[]'); } catch { return []; }
+}
+
+function saveTeamMatches(matches: TeamMatch[]) {
+  localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
+}
+
+export function getTeamMatchesForTeam(teamId: string): TeamMatch[] {
+  return getTeamMatches().filter(m => m.team1Id === teamId || m.team2Id === teamId);
+}
+
+export function createTeamMatch(team1Id: string, team2Id: string, pairingsCount: number, leagueId?: string, matchday?: number): TeamMatch {
+  const pairings: TeamMatchPairing[] = Array.from({ length: pairingsCount }, (_, i) => ({
+    id: `tmp_${Date.now()}_${i}`,
+    teamMatchId: '',
+    pair1GoalkeeperName: '',
+    pair1ForwardName: '',
+    pair2GoalkeeperName: '',
+    pair2ForwardName: '',
+  }));
+  const match: TeamMatch = {
+    id: `tmatch_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+    team1Id, team2Id, leagueId, matchday,
+    pairings,
+    status: 'pendiente',
+    date: new Date().toISOString().split('T')[0],
+  };
+  match.pairings.forEach(p => p.teamMatchId = match.id);
+  const all = getTeamMatches();
+  all.push(match);
+  saveTeamMatches(all);
+  return match;
+}
+
+export function updateTeamMatchPairing(matchId: string, pairingId: string, updates: Partial<TeamMatchPairing>) {
+  const all = getTeamMatches();
+  const match = all.find(m => m.id === matchId);
+  if (!match) return;
+  const pairing = match.pairings.find(p => p.id === pairingId);
+  if (pairing) Object.assign(pairing, updates);
+  saveTeamMatches(all);
+}
+
+export function finalizeTeamMatch(matchId: string) {
+  const all = getTeamMatches();
+  const match = all.find(m => m.id === matchId);
+  if (!match) return;
+
+  let team1Wins = 0, team2Wins = 0;
+  match.pairings.forEach(p => {
+    if (p.score1 != null && p.score2 != null) {
+      if (p.score1 > p.score2) { p.winnerId = 'team1'; team1Wins++; }
+      else if (p.score2 > p.score1) { p.winnerId = 'team2'; team2Wins++; }
+    }
+  });
+
+  match.winnerId = team1Wins > team2Wins ? match.team1Id : team2Wins > team1Wins ? match.team2Id : undefined;
+  match.status = 'finalizado';
+  saveTeamMatches(all);
+
+  // Update team stats
+  if (match.winnerId) {
+    const loserId = match.winnerId === match.team1Id ? match.team2Id : match.team1Id;
+    const winnerStats = getTeamStats(match.winnerId);
+    updateTeamStats(match.winnerId, { matchesPlayed: winnerStats.matchesPlayed + 1, wins: winnerStats.wins + 1 });
+    const loserStats = getTeamStats(loserId);
+    updateTeamStats(loserId, { matchesPlayed: loserStats.matchesPlayed + 1, losses: loserStats.losses + 1 });
+  }
+}
+
+// ===== TEAM LEAGUES =====
+
+export function getTeamLeagues(): TeamLeague[] {
+  try { return JSON.parse(localStorage.getItem(TEAM_LEAGUES_KEY) || '[]'); } catch { return []; }
+}
+
+function saveTeamLeagues(leagues: TeamLeague[]) {
+  localStorage.setItem(TEAM_LEAGUES_KEY, JSON.stringify(leagues));
+}
+
+export function createTeamLeague(name: string, teamIds: string[], pairingsPerMatch: number = 3, season?: string): TeamLeague {
+  const league: TeamLeague = {
+    id: `tleague_${Date.now()}`,
+    name, season, teamIds, pairingsPerMatch,
+    status: 'activa',
+    createdAt: new Date().toISOString().split('T')[0],
+  };
+  const all = getTeamLeagues();
+  all.push(league);
+  saveTeamLeagues(all);
+  return league;
+}
+
+export function generateLeagueMatchdays(leagueId: string) {
+  const leagues = getTeamLeagues();
+  const league = leagues.find(l => l.id === leagueId);
+  if (!league) return;
+
+  const teams = [...league.teamIds];
+  if (teams.length < 2) return;
+
+  // Round-robin schedule
+  const n = teams.length;
+  const rounds = n % 2 === 0 ? n - 1 : n;
+  const list = [...teams];
+  if (n % 2 !== 0) list.push('BYE');
+
+  const half = list.length / 2;
+  for (let round = 0; round < rounds; round++) {
+    for (let i = 0; i < half; i++) {
+      const home = list[i];
+      const away = list[list.length - 1 - i];
+      if (home === 'BYE' || away === 'BYE') continue;
+      createTeamMatch(home, away, league.pairingsPerMatch, leagueId, round + 1);
+    }
+    // Rotate (keep first fixed)
+    list.splice(1, 0, list.pop()!);
+  }
+}
+
+export function getTeamLeagueStandings(leagueId: string): TeamLeagueStanding[] {
+  const leagues = getTeamLeagues();
+  const league = leagues.find(l => l.id === leagueId);
+  if (!league) return [];
+
+  const matches = getTeamMatches().filter(m => m.leagueId === leagueId && m.status === 'finalizado');
+  const standingsMap: Record<string, TeamLeagueStanding> = {};
+
+  league.teamIds.forEach(id => {
+    standingsMap[id] = { teamId: id, played: 0, wins: 0, losses: 0, points: 0, pairingDiff: 0 };
+  });
+
+  matches.forEach(m => {
+    let t1PairWins = 0, t2PairWins = 0;
+    m.pairings.forEach(p => {
+      if (p.winnerId === 'team1') t1PairWins++;
+      else if (p.winnerId === 'team2') t2PairWins++;
+    });
+
+    if (standingsMap[m.team1Id]) {
+      standingsMap[m.team1Id].played++;
+      standingsMap[m.team1Id].pairingDiff += t1PairWins - t2PairWins;
+      if (m.winnerId === m.team1Id) { standingsMap[m.team1Id].wins++; standingsMap[m.team1Id].points += 3; }
+      else if (m.winnerId) standingsMap[m.team1Id].losses++;
+    }
+    if (standingsMap[m.team2Id]) {
+      standingsMap[m.team2Id].played++;
+      standingsMap[m.team2Id].pairingDiff += t2PairWins - t1PairWins;
+      if (m.winnerId === m.team2Id) { standingsMap[m.team2Id].wins++; standingsMap[m.team2Id].points += 3; }
+      else if (m.winnerId) standingsMap[m.team2Id].losses++;
+    }
+  });
+
+  return Object.values(standingsMap).sort((a, b) => b.points - a.points || b.pairingDiff - a.pairingDiff);
+}
+
+export function getTeamRanking(): (Team & { stats: TeamStats; winrate: number })[] {
+  return [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))]
+    .map(team => {
+      const stats = getTeamStats(team.id);
+      const winrate = stats.matchesPlayed > 0 ? Math.round((stats.wins / stats.matchesPlayed) * 100) : 0;
+      return { ...team, stats, winrate };
+    })
+    .sort((a, b) => b.stats.wins - a.stats.wins || b.winrate - a.winrate || b.elo - a.elo);
+}
