@@ -128,7 +128,7 @@ export default function CreateTournamentPage() {
               </div>
             </div>
           ) : (
-          <>
+            <>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Buscar local</label>
                 <VenueSearchCombobox 
@@ -138,12 +138,12 @@ export default function CreateTournamentPage() {
                 />
               </div>
               {selectedVenue && (
-                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 mt-4">
                   <p className="text-sm font-medium">{selectedVenue.name}</p>
                   <p className="text-xs text-muted-foreground">{selectedVenue.address}, {selectedVenue.city}</p>
                 </div>
               )}
-              <div>
+              <div className="mt-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tipo de mesa</p>
                 <div className="flex flex-wrap gap-1.5">
                   {TABLE_BRANDS.map(b => (

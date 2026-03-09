@@ -88,7 +88,6 @@ export interface Tournament {
   format: TournamentFormat;
   pairingMode: PairingMode;
   maxPairs: number;
-  hasWaitlist: boolean;
   entryFee?: number;
   prizes?: string;
   organizerId: string;
