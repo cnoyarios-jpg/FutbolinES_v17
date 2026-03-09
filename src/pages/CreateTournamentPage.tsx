@@ -5,7 +5,7 @@ import { ChevronRight, ChevronLeft, MapPin, AlertCircle } from 'lucide-react';
 import { TableBrand, PlayStyle, TournamentFormat, PairingMode, Tournament } from '@/types';
 import { MOCK_TOURNAMENTS, MOCK_VENUES, MOCK_USER, getCurrentUser, persistTournaments } from '@/data/mock';
 import { toast } from 'sonner';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { VenueSearchCombobox } from '@/components/VenueSearchCombobox';
 
 const STEPS = ['Información', 'Formato', 'Estilo', 'Localización', 'Inscripción', 'Premios', 'Vista previa'];
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
@@ -31,10 +31,10 @@ export default function CreateTournamentPage() {
 
   const [form, setForm] = useState({
     name: '', description: '', date: '', time: '',
-    venueId: '', // Now we use venueId instead of free text
+    venueId: '',
     tableBrand: 'Presas' as TableBrand, playStyle: 'parado' as PlayStyle,
     format: 'eliminacion_simple' as TournamentFormat, pairingMode: 'inscripcion' as PairingMode,
-    maxPairs: 16, hasWaitlist: false, entryFee: '', prizes: '',
+    maxPairs: 16, entryFee: '', prizes: '',
     requiresApproval: false,
   });
   const update = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
@@ -56,7 +56,7 @@ export default function CreateTournamentPage() {
       date: form.date || new Date().toISOString().split('T')[0], time: form.time || '18:00',
       venueId: form.venueId, venueName: venue.name, city: venue.city,
       tableBrand: form.tableBrand, playStyle: form.playStyle, format: form.format,
-      pairingMode: form.pairingMode, maxPairs: form.maxPairs, hasWaitlist: form.hasWaitlist,
+      pairingMode: form.pairingMode, maxPairs: form.maxPairs,
       entryFee: form.entryFee ? parseInt(form.entryFee) : undefined, prizes: form.prizes || undefined,
       organizerId: organizer.id, organizerName: organizer.displayName, requiresApproval: form.requiresApproval,
       status: 'abierto', hasCategories: false, categories: [],
@@ -130,30 +130,20 @@ export default function CreateTournamentPage() {
           ) : (
             <>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Selecciona el local</label>
-                <Select value={form.venueId} onValueChange={(value) => update('venueId', value)}>
-                  <SelectTrigger className="mt-1 w-full">
-                    <SelectValue placeholder="Elige un local registrado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeVenues.map(venue => (
-                      <SelectItem key={venue.id} value={venue.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{venue.name}</span>
-                          <span className="text-muted-foreground text-xs">({venue.city})</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Buscar local</label>
+                <VenueSearchCombobox 
+                  value={form.venueId} 
+                  onValueChange={(venueId) => update('venueId', venueId)}
+                  placeholder="Escribe para buscar un local..."
+                />
               </div>
               {selectedVenue && (
-                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 mt-4">
                   <p className="text-sm font-medium">{selectedVenue.name}</p>
                   <p className="text-xs text-muted-foreground">{selectedVenue.address}, {selectedVenue.city}</p>
                 </div>
               )}
-              <div>
+              <div className="mt-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tipo de mesa</p>
                 <div className="flex flex-wrap gap-1.5">
                   {TABLE_BRANDS.map(b => (
@@ -181,12 +171,8 @@ export default function CreateTournamentPage() {
             ))}
           </div>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.hasWaitlist} onChange={e => update('hasWaitlist', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />
-            Lista de espera
-          </label>
-          <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.requiresApproval} onChange={e => update('requiresApproval', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />
-            Requiere aprobación
+            Requiere aprobación del organizador
           </label>
         </div>
       );

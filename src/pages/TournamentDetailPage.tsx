@@ -271,20 +271,106 @@ export default function TournamentDetailPage() {
     }
   }, [id]);
 
+  // === REVERT ELO CHANGES (for corrections) ===
+  const revertEloChanges = useCallback((previousWinnerId: string, previousLoserId: string, matchKey: string) => {
+    const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
+    const winnerPair = allPairs.find(p => p.id === previousWinnerId);
+    const loserPair = allPairs.find(p => p.id === previousLoserId);
+
+    if (!winnerPair || !loserPair) return;
+
+    // Recalculate the ELO changes that were applied
+    const eloResult = calculate2v2EloChanges(
+      winnerPair.goalkeeper.elo,
+      winnerPair.forward.elo,
+      loserPair.goalkeeper.elo,
+      loserPair.forward.elo,
+    );
+
+    // Revert for each player (invert the changes)
+    const revertRanking = (userId: string, change: number, position: string) => {
+      if (isGuestPlayer(userId)) return;
+      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+      if (ranking) {
+        ranking.general -= change;
+        if (position === 'portero') ranking.asGoalkeeper -= change;
+        else ranking.asForward -= change;
+      }
+    };
+
+    // Revert winner gains
+    revertRanking(winnerPair.goalkeeper.userId, eloResult.winnerGoalkeeperChange, 'portero');
+    revertRanking(winnerPair.forward.userId, eloResult.winnerForwardChange, 'delantero');
+    // Revert loser losses
+    revertRanking(loserPair.goalkeeper.userId, eloResult.loserGoalkeeperChange, 'portero');
+    revertRanking(loserPair.forward.userId, eloResult.loserForwardChange, 'delantero');
+
+    // Revert win/loss stats
+    const wGk = MOCK_RANKINGS.find(r => r.userId === winnerPair.goalkeeper.userId);
+    const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
+    const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
+    const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
+    if (wGk) { wGk.wins = Math.max(0, wGk.wins - 1); }
+    if (wFw) { wFw.wins = Math.max(0, wFw.wins - 1); }
+    if (lGk) { lGk.losses = Math.max(0, lGk.losses - 1); }
+    if (lFw) { lFw.losses = Math.max(0, lFw.losses - 1); }
+
+    // Remove ELO changes display for this match
+    setEloChanges(prev => prev.filter(ec => ec.matchKey !== matchKey));
+    persistRankings();
+  }, [id]);
+
   // === BRACKET: Select winner (elimination) ===
   const handleSelectWinner = useCallback((roundIdx: number, matchIdx: number, winnerId: string) => {
     if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
+    
+    const currentUser = getCurrentUser();
+    const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+    
     setBracket(prev => {
       const newBracket = prev.map(r => r.map(m => ({ ...m })));
       const match = newBracket[roundIdx][matchIdx];
-      if (match.winnerId) return prev;
+      const matchKey = `${roundIdx}-${matchIdx}`;
+      
+      // If match already has a winner and we're changing it (correction)
+      if (match.winnerId && match.winnerId !== winnerId) {
+        if (!isOrganizer) {
+          toast.error('Solo el organizador puede corregir resultados');
+          return prev;
+        }
+        
+        const previousWinnerId = match.winnerId;
+        const previousLoserId = match.pair1Id === previousWinnerId ? match.pair2Id : match.pair1Id;
+        
+        // Revert old ELO changes
+        if (previousLoserId) {
+          revertEloChanges(previousWinnerId, previousLoserId, matchKey);
+        }
+        
+        // Save correction record
+        saveCorrection({
+          id: `corr_${Date.now()}`,
+          tournamentId: tournament.id,
+          matchKey,
+          correctedBy: currentUser.id,
+          previousWinnerId,
+          newWinnerId: winnerId,
+          date: new Date().toISOString(),
+        });
+        
+        toast.success('Resultado corregido. ELO recalculado.');
+      }
+      
+      // Set new winner
       match.winnerId = winnerId;
-
       const loserId = match.pair1Id === winnerId ? match.pair2Id : match.pair1Id;
+      
+      // Apply new ELO changes (only if not already applied for new result)
       if (loserId) {
-        applyEloChanges(winnerId, loserId, `${roundIdx}-${matchIdx}`);
+        applyEloChanges(winnerId, loserId, matchKey);
       }
 
+      // Update next round
       if (roundIdx + 1 < newBracket.length) {
         const nextMatchIdx = Math.floor(matchIdx / 2);
         const nextMatch = newBracket[roundIdx + 1][nextMatchIdx];
@@ -298,7 +384,7 @@ export default function TournamentDetailPage() {
       return newBracket;
     });
     forceUpdate(n => n + 1);
-  }, [applyEloChanges]);
+  }, [applyEloChanges, revertEloChanges, tournament]);
 
   // === ROUND ROBIN: Select winner ===
   const handleRRSelectWinner = useCallback((matchId: string, winnerId: string) => {
@@ -1180,8 +1266,8 @@ function BracketView({
           </p>
           {round.map((match, mi) => {
             const canSelect = !locked && !match.winnerId && !match.isBye && Boolean(match.pair1Id) && Boolean(match.pair2Id);
+            const canCorrect = !locked && match.winnerId && !match.isBye && Boolean(match.pair1Id) && Boolean(match.pair2Id);
             
-            // Si es un bye pero por alguna razón no tiene ganador (no debería pasar, pero por seguridad)
             const p1 = match.pair1Id;
             const p2 = match.pair2Id;
 
@@ -1192,23 +1278,25 @@ function BracketView({
                     <div
                       className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
                         match.winnerId === p1 && p1 ? 'bg-success/10 font-semibold text-success' : ''
-                      } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
-                      onClick={() => canSelect && p1 && onSelectWinner(ri, mi, p1)}
+                      } ${canSelect || canCorrect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => (canSelect || canCorrect) && p1 && match.winnerId !== p1 && onSelectWinner(ri, mi, p1)}
                     >
                       <span className={!p1 ? 'text-muted-foreground italic' : ''}>{p1 ? getPairName(p1) : 'Bye'}</span>
                       {match.winnerId === p1 && p1 && <Check className="h-3 w-3 text-success" />}
                       {canSelect && !match.winnerId && p1 && <span className="text-[9px] text-primary">Elegir</span>}
+                      {canCorrect && match.winnerId && match.winnerId !== p1 && p1 && <span className="text-[9px] text-warning">Corregir</span>}
                     </div>
                     <div className="h-px bg-border my-0.5" />
                     <div
                       className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${
                         match.winnerId === p2 && p2 ? 'bg-success/10 font-semibold text-success' : ''
-                      } ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
-                      onClick={() => canSelect && p2 && onSelectWinner(ri, mi, p2)}
+                      } ${canSelect || canCorrect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => (canSelect || canCorrect) && p2 && match.winnerId !== p2 && onSelectWinner(ri, mi, p2)}
                     >
                       <span className={!p2 ? 'text-muted-foreground italic' : ''}>{p2 ? getPairName(p2) : 'Bye'}</span>
                       {match.winnerId === p2 && p2 && <Check className="h-3 w-3 text-success" />}
                       {canSelect && !match.winnerId && p2 && <span className="text-[9px] text-primary">Elegir</span>}
+                      {canCorrect && match.winnerId && match.winnerId !== p2 && p2 && <span className="text-[9px] text-warning">Corregir</span>}
                     </div>
                   </>
                 ) : (
