@@ -75,12 +75,10 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const partners = getFrequentPartners(targetUserId);
   const topPartner = partners.length > 0 ? partners[0] : null;
   const pairHistory = getPairHistory(targetUserId);
-  const achievements = getUserAchievements(targetUserId);
 
   const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
   const bestStyle = rating ? (rating.byStyle.parado >= rating.byStyle.movimiento ? 'Parado' : 'Movimiento') : null;
   const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
-  const mvpTournaments = MOCK_TOURNAMENTS.filter(t => t.mvpPlayerId === targetUserId);
 
   const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
     if (t.status !== 'finalizado') return false;
@@ -165,24 +163,8 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Achievements */}
-      {(achievements.length > 0 || ACHIEVEMENT_DEFINITIONS.length > 0) && (
-        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
-          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Medal className="h-4 w-4 text-accent" /> Logros</h3>
-          <div className="flex flex-wrap gap-2">
-            {ACHIEVEMENT_DEFINITIONS.map(def => {
-              const unlocked = achievements.find(a => a.id === def.id);
-              return (
-                <div key={def.id} className={`rounded-lg px-3 py-2 text-center text-xs ${unlocked ? 'bg-accent/10 border border-accent/30' : 'bg-muted opacity-50'}`}>
-                  <span className="text-lg">{def.icon}</span>
-                  <p className="font-semibold mt-0.5">{def.name}</p>
-                  <p className="text-[9px] text-muted-foreground">{def.description}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Tiered Achievements Section */}
+      <AchievementsSection userId={targetUserId} />
 
       {rating && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
