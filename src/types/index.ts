@@ -328,3 +328,54 @@ export interface ResultCorrection {
   reason?: string;
   date: string;
 }
+
+// ===== TEAM MATCHES (ENFRENTAMIENTOS) =====
+
+export type TeamMatchStatus = 'pendiente' | 'en_curso' | 'finalizado';
+
+export interface TeamMatchPairing {
+  id: string;
+  teamMatchId: string;
+  pair1GoalkeeperName: string;
+  pair1ForwardName: string;
+  pair2GoalkeeperName: string;
+  pair2ForwardName: string;
+  score1?: number;
+  score2?: number;
+  winnerId?: string; // 'team1' | 'team2'
+}
+
+export interface TeamMatch {
+  id: string;
+  team1Id: string;
+  team2Id: string;
+  leagueId?: string;
+  matchday?: number;
+  pairings: TeamMatchPairing[];
+  winnerId?: string;
+  status: TeamMatchStatus;
+  date: string;
+}
+
+// ===== TEAM LEAGUES =====
+
+export type TeamLeagueStatus = 'activa' | 'finalizada';
+
+export interface TeamLeague {
+  id: string;
+  name: string;
+  season?: string;
+  teamIds: string[];
+  pairingsPerMatch: number;
+  status: TeamLeagueStatus;
+  createdAt: string;
+}
+
+export interface TeamLeagueStanding {
+  teamId: string;
+  played: number;
+  wins: number;
+  losses: number;
+  points: number;
+  pairingDiff: number;
+}

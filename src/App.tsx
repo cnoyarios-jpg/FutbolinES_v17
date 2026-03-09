@@ -13,6 +13,7 @@ import TournamentDetailPage from "@/pages/TournamentDetailPage";
 import RankingsPage from "@/pages/RankingsPage";
 import ProfilePage from "@/pages/ProfilePage";
 import TeamsPage from "@/pages/TeamsPage";
+import TeamLeaguePage from "@/pages/TeamLeaguePage";
 import VenueDetailPage from "@/pages/VenueDetailPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "./pages/NotFound";
@@ -52,6 +53,7 @@ const App = () => {
               <Route path="/perfil" element={<ProfilePage onLogout={() => { logoutUser(); setIsLoggedIn(false); }} />} />
               <Route path="/perfil/:userId" element={<ProfilePage />} />
               <Route path="/equipos" element={<TeamsPage />} />
+              <Route path="/equipos/ligas" element={<TeamLeaguePage />} />
               <Route path="/equipos/:teamId" element={<TeamsPage />} />
               <Route path="/locales/:id" element={<VenueDetailPage />} />
               <Route path="*" element={<NotFound />} />
