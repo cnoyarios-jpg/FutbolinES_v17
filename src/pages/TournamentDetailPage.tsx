@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, calculateTournamentAvgElo } from '@/data/mock';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
@@ -532,6 +532,21 @@ export default function TournamentDetailPage() {
             <Users className="h-4 w-4 shrink-0" />
             <span>{pairs.length}/{tournament.maxPairs} parejas</span>
           </div>
+          {/* ELO medio del torneo */}
+          {(() => {
+            const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
+            return (
+              <div className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 shrink-0 text-accent" />
+                {registeredCount >= 2 ? (
+                  <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">ELO medio: sin datos suficientes</span>
+                )}
+                <span className="text-xs text-muted-foreground">({registeredCount} registrados)</span>
+              </div>
+            );
+          })()}
           {tournament.entryFee && <p>💰 Inscripción: {tournament.entryFee}€</p>}
           {tournament.prizes && <p>🏆 {tournament.prizes}</p>}
         </div>

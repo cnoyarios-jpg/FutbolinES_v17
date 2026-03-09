@@ -589,6 +589,9 @@ export function getActiveSeason(): Season | null {
 
 // ===== ACHIEVEMENTS =====
 
+import { TIERED_ACHIEVEMENTS, calculateLevel, PlayerTieredAchievement } from '@/types/achievements';
+
+// Legacy definitions for backwards compatibility
 export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   { id: 'first_tournament_win', name: 'Primera victoria', description: 'Gana tu primer torneo', icon: '🏆' },
   { id: 'five_tournament_wins', name: 'Pentacampeón', description: 'Gana 5 torneos', icon: '⭐' },
@@ -598,6 +601,108 @@ export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   { id: 'play_3_venues', name: 'Explorador', description: 'Jugar en 3 bares distintos', icon: '🗺️' },
   { id: 'play_5_tables', name: 'Versátil', description: 'Jugar en 5 mesas distintas', icon: '🎯' },
 ];
+
+// ===== TIERED ACHIEVEMENTS STORAGE =====
+const TIERED_ACHIEVEMENTS_KEY = 'futbolines_tiered_achievements';
+
+function getTieredAchievementsStore(): Record<string, PlayerTieredAchievement[]> {
+  try {
+    return JSON.parse(localStorage.getItem(TIERED_ACHIEVEMENTS_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function saveTieredAchievementsStore(store: Record<string, PlayerTieredAchievement[]>) {
+  localStorage.setItem(TIERED_ACHIEVEMENTS_KEY, JSON.stringify(store));
+}
+
+export function getPlayerTieredAchievements(userId: string): PlayerTieredAchievement[] {
+  const store = getTieredAchievementsStore();
+  return store[userId] || [];
+}
+
+export function updatePlayerAchievementProgress(userId: string, achievementId: string, newValue: number) {
+  const store = getTieredAchievementsStore();
+  if (!store[userId]) store[userId] = [];
+  
+  let achievement = store[userId].find(a => a.achievementId === achievementId);
+  const definition = TIERED_ACHIEVEMENTS.find(d => d.id === achievementId);
+  if (!definition) return;
+  
+  if (!achievement) {
+    achievement = { achievementId, currentValue: 0, unlockedTiers: [] };
+    store[userId].push(achievement);
+  }
+  
+  const oldLevel = calculateLevel(achievement.currentValue, definition.tiers);
+  achievement.currentValue = newValue;
+  const newLevel = calculateLevel(newValue, definition.tiers);
+  
+  // Unlock new tiers
+  for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
+    if (!achievement.unlockedTiers.some(t => t.level === lvl)) {
+      achievement.unlockedTiers.push({ level: lvl, unlockedAt: new Date().toISOString() });
+    }
+  }
+  
+  saveTieredAchievementsStore(store);
+}
+
+// ===== CALCULATE TOURNAMENT AVG ELO =====
+export function calculateTournamentAvgElo(tournamentId: string): { avgElo: number; registeredCount: number } {
+  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const registeredElos: number[] = [];
+  
+  pairs.forEach(p => {
+    if (!isGuestPlayer(p.goalkeeper.userId)) {
+      const gkR = MOCK_RANKINGS.find(r => r.userId === p.goalkeeper.userId);
+      if (gkR) registeredElos.push(gkR.general);
+    }
+    if (!isGuestPlayer(p.forward.userId)) {
+      const fwR = MOCK_RANKINGS.find(r => r.userId === p.forward.userId);
+      if (fwR) registeredElos.push(fwR.general);
+    }
+  });
+  
+  const avgElo = registeredElos.length > 0 
+    ? Math.round(registeredElos.reduce((a, b) => a + b, 0) / registeredElos.length) 
+    : 0;
+  
+  return { avgElo, registeredCount: registeredElos.length };
+}
+
+// ===== MVP RECORDS WITH CONTEXT =====
+export interface MvpRecord {
+  tournamentId: string;
+  tournamentName: string;
+  date: string;
+  venueName?: string;
+  format?: string;
+  avgElo: number;
+}
+
+const MVP_RECORDS_KEY = 'futbolines_mvp_records';
+
+function getMvpRecordsStore(): Record<string, MvpRecord[]> {
+  try { return JSON.parse(localStorage.getItem(MVP_RECORDS_KEY) || '{}'); } catch { return {}; }
+}
+
+function saveMvpRecordsStore(store: Record<string, MvpRecord[]>) {
+  localStorage.setItem(MVP_RECORDS_KEY, JSON.stringify(store));
+}
+
+export function getPlayerMvpRecords(userId: string): MvpRecord[] {
+  return getMvpRecordsStore()[userId] || [];
+}
+
+export function saveMvpRecord(userId: string, record: MvpRecord) {
+  const store = getMvpRecordsStore();
+  if (!store[userId]) store[userId] = [];
+  // Avoid duplicates
+  if (!store[userId].some(r => r.tournamentId === record.tournamentId)) {
+    store[userId].push(record);
+    saveMvpRecordsStore(store);
+  }
+}
 
 function getAchievementsStore(): Record<string, PlayerAchievement[]> {
   try {
@@ -641,6 +746,11 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
   if (!tournament) return;
   tournament.mvpPlayerId = mvpUserId;
   tournament.mvpPlayerName = mvpName;
+  
+  // Calculate and save MVP record with context
+  const { avgElo } = calculateTournamentAvgElo(tournamentId);
+  const venue = MOCK_VENUES.find(v => v.id === tournament.venueId);
+  
   if (!isGuestPlayer(mvpUserId)) {
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
@@ -649,7 +759,25 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.general += 15;
       ranking.asGoalkeeper += 10;
       ranking.asForward += 10;
+      
+      // Update tiered achievements
+      updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
+      if (avgElo >= 1600) {
+        const currentHighLevelMvps = getPlayerMvpRecords(mvpUserId).filter(r => r.avgElo >= 1600).length + 1;
+        updatePlayerAchievementProgress(mvpUserId, 'mvp_high_level', currentHighLevelMvps);
+      }
     }
+    
+    // Save MVP record with tournament context
+    saveMvpRecord(mvpUserId, {
+      tournamentId,
+      tournamentName: tournament.name,
+      date: tournament.date,
+      venueName: venue?.name,
+      format: tournament.format,
+      avgElo,
+    });
+    
     checkAndGrantAchievement(mvpUserId, 'mvp_tournament');
   }
   persistRankings();
