@@ -6,7 +6,7 @@ import {
   getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
   getRegisteredUsers
 } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake } from 'lucide-react';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
@@ -240,19 +240,8 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {mvpTournaments.length > 0 && (
-        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
-          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Award className="h-4 w-4 text-accent" /> Jugador del torneo</h3>
-          <div className="flex flex-col gap-2">
-            {mvpTournaments.map(t => (
-              <Link key={t.id} to={`/torneos/${t.id}`} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs hover:bg-muted/80 transition">
-                <span className="font-semibold">{t.name}</span>
-                <span className="text-muted-foreground">{new Date(t.date).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* MVP History with context */}
+      <MvpHistorySection userId={targetUserId} />
 
       {teams.length > 0 && (
         <div className="mt-6">
