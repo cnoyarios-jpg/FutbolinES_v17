@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Award } from 'lucide-react';
-import { getPlayerMvpRecords, MOCK_TOURNAMENTS } from '@/data/mock';
+import { getPlayerMvpRecords, MOCK_TOURNAMENTS, calculateTournamentAvgElo } from '@/data/mock';
 
 const formatLabels: Record<string, string> = {
   eliminacion_simple: 'Eliminación',
@@ -24,14 +24,17 @@ export default function MvpHistorySection({ userId }: MvpHistorySectionProps) {
   
   const allMvps = [
     ...mvpRecords,
-    ...legacyMvpTournaments.map(t => ({
-      tournamentId: t.id,
-      tournamentName: t.name,
-      date: t.date,
-      venueName: t.venueName,
-      format: t.format,
-      avgElo: 0, // Legacy data doesn't have this
-    }))
+    ...legacyMvpTournaments.map(t => {
+      const { avgElo } = calculateTournamentAvgElo(t.id);
+      return {
+        tournamentId: t.id,
+        tournamentName: t.name,
+        date: t.date,
+        venueName: t.venueName,
+        format: t.format,
+        avgElo,
+      };
+    })
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   if (allMvps.length === 0) return null;
