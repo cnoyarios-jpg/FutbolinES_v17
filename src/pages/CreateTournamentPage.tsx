@@ -170,7 +170,6 @@ export default function CreateTournamentPage() {
               </button>
             ))}
           </div>
-          </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.requiresApproval} onChange={e => update('requiresApproval', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />
             Requiere aprobación del organizador
