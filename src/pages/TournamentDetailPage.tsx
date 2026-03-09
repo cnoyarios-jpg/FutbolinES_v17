@@ -271,20 +271,106 @@ export default function TournamentDetailPage() {
     }
   }, [id]);
 
+  // === REVERT ELO CHANGES (for corrections) ===
+  const revertEloChanges = useCallback((previousWinnerId: string, previousLoserId: string, matchKey: string) => {
+    const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
+    const winnerPair = allPairs.find(p => p.id === previousWinnerId);
+    const loserPair = allPairs.find(p => p.id === previousLoserId);
+
+    if (!winnerPair || !loserPair) return;
+
+    // Recalculate the ELO changes that were applied
+    const eloResult = calculate2v2EloChanges(
+      winnerPair.goalkeeper.elo,
+      winnerPair.forward.elo,
+      loserPair.goalkeeper.elo,
+      loserPair.forward.elo,
+    );
+
+    // Revert for each player (invert the changes)
+    const revertRanking = (userId: string, change: number, position: string) => {
+      if (isGuestPlayer(userId)) return;
+      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+      if (ranking) {
+        ranking.general -= change;
+        if (position === 'portero') ranking.asGoalkeeper -= change;
+        else ranking.asForward -= change;
+      }
+    };
+
+    // Revert winner gains
+    revertRanking(winnerPair.goalkeeper.userId, eloResult.winnerGoalkeeperChange, 'portero');
+    revertRanking(winnerPair.forward.userId, eloResult.winnerForwardChange, 'delantero');
+    // Revert loser losses
+    revertRanking(loserPair.goalkeeper.userId, eloResult.loserGoalkeeperChange, 'portero');
+    revertRanking(loserPair.forward.userId, eloResult.loserForwardChange, 'delantero');
+
+    // Revert win/loss stats
+    const wGk = MOCK_RANKINGS.find(r => r.userId === winnerPair.goalkeeper.userId);
+    const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
+    const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
+    const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
+    if (wGk) { wGk.wins = Math.max(0, wGk.wins - 1); }
+    if (wFw) { wFw.wins = Math.max(0, wFw.wins - 1); }
+    if (lGk) { lGk.losses = Math.max(0, lGk.losses - 1); }
+    if (lFw) { lFw.losses = Math.max(0, lFw.losses - 1); }
+
+    // Remove ELO changes display for this match
+    setEloChanges(prev => prev.filter(ec => ec.matchKey !== matchKey));
+    persistRankings();
+  }, [id]);
+
   // === BRACKET: Select winner (elimination) ===
   const handleSelectWinner = useCallback((roundIdx: number, matchIdx: number, winnerId: string) => {
     if (tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
+    
+    const currentUser = getCurrentUser();
+    const isOrganizer = currentUser && tournament.organizerId === currentUser.id;
+    
     setBracket(prev => {
       const newBracket = prev.map(r => r.map(m => ({ ...m })));
       const match = newBracket[roundIdx][matchIdx];
-      if (match.winnerId) return prev;
+      const matchKey = `${roundIdx}-${matchIdx}`;
+      
+      // If match already has a winner and we're changing it (correction)
+      if (match.winnerId && match.winnerId !== winnerId) {
+        if (!isOrganizer) {
+          toast.error('Solo el organizador puede corregir resultados');
+          return prev;
+        }
+        
+        const previousWinnerId = match.winnerId;
+        const previousLoserId = match.pair1Id === previousWinnerId ? match.pair2Id : match.pair1Id;
+        
+        // Revert old ELO changes
+        if (previousLoserId) {
+          revertEloChanges(previousWinnerId, previousLoserId, matchKey);
+        }
+        
+        // Save correction record
+        saveCorrection({
+          id: `corr_${Date.now()}`,
+          tournamentId: tournament.id,
+          matchKey,
+          correctedBy: currentUser.id,
+          previousWinnerId,
+          newWinnerId: winnerId,
+          date: new Date().toISOString(),
+        });
+        
+        toast.success('Resultado corregido. ELO recalculado.');
+      }
+      
+      // Set new winner
       match.winnerId = winnerId;
-
       const loserId = match.pair1Id === winnerId ? match.pair2Id : match.pair1Id;
+      
+      // Apply new ELO changes (only if not already applied for new result)
       if (loserId) {
-        applyEloChanges(winnerId, loserId, `${roundIdx}-${matchIdx}`);
+        applyEloChanges(winnerId, loserId, matchKey);
       }
 
+      // Update next round
       if (roundIdx + 1 < newBracket.length) {
         const nextMatchIdx = Math.floor(matchIdx / 2);
         const nextMatch = newBracket[roundIdx + 1][nextMatchIdx];
@@ -298,7 +384,7 @@ export default function TournamentDetailPage() {
       return newBracket;
     });
     forceUpdate(n => n + 1);
-  }, [applyEloChanges]);
+  }, [applyEloChanges, revertEloChanges, tournament]);
 
   // === ROUND ROBIN: Select winner ===
   const handleRRSelectWinner = useCallback((matchId: string, winnerId: string) => {
