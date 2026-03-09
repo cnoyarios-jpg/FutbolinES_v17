@@ -5,9 +5,10 @@ import {
   MOCK_TEAMS, MOCK_RANKINGS, MOCK_VENUES,
   getCurrentUser, saveTeam, updateTeam, deleteTeam,
   getTeamMembers, addTeamMember, respondTeamInvite, getTeamStats,
-  searchPlayers, addNotification,
+  searchPlayers, addNotification, getTeamMatchesForTeam, getTeamLeagues,
+  getTeamLeagueStandings, getStoredTeams,
 } from '@/data/mock';
-import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield } from 'lucide-react';
+import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
 import { toast } from 'sonner';
 
@@ -24,7 +25,7 @@ export default function TeamsPage() {
   const [editForm, setEditForm] = useState({ name: '', city: '', description: '' });
   const [isEditing, setIsEditing] = useState(false);
 
-  const allTeams = [...MOCK_TEAMS].sort((a, b) => b.elo - a.elo);
+  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))].sort((a, b) => b.elo - a.elo);
 
   const handleCreate = () => {
     if (!form.name.trim()) { toast.error('Nombre obligatorio'); return; }
@@ -39,7 +40,6 @@ export default function TeamsPage() {
       createdAt: new Date().toISOString().split('T')[0],
     };
     saveTeam(newTeam);
-    // Add captain as member
     addTeamMember({
       id: `tm_${Date.now()}`, teamId: newTeam.id, userId: currentUser.id,
       displayName: currentUser.displayName, role: 'capitan',
@@ -77,15 +77,40 @@ export default function TeamsPage() {
     forceUpdate(n => n + 1);
   };
 
-  const detailTeam = showDetail ? MOCK_TEAMS.find(t => t.id === showDetail) : null;
+  const detailTeam = showDetail ? allTeams.find(t => t.id === showDetail) : null;
   const detailMembers = showDetail ? getTeamMembers(showDetail) : [];
   const detailStats = showDetail ? getTeamStats(showDetail) : null;
   const isCaptain = detailTeam && currentUser && detailTeam.captainId === currentUser.id;
 
+  // Enhanced profile data
+  const recentMatches = showDetail ? getTeamMatchesForTeam(showDetail).filter(m => m.status === 'finalizado').slice(-5).reverse() : [];
+  const teamLeaguePosition = (() => {
+    if (!showDetail) return null;
+    const leagues = getTeamLeagues().filter(l => l.teamIds.includes(showDetail));
+    if (leagues.length === 0) return null;
+    const league = leagues[leagues.length - 1]; // latest league
+    const standings = getTeamLeagueStandings(league.id);
+    const pos = standings.findIndex(s => s.teamId === showDetail);
+    return pos >= 0 ? { leagueName: league.name, position: pos + 1, total: standings.length } : null;
+  })();
+
+  const winrate = detailStats && detailStats.matchesPlayed > 0 ? Math.round((detailStats.wins / detailStats.matchesPlayed) * 100) : 0;
+  const captainName = detailTeam ? (MOCK_RANKINGS.find(r => r.userId === detailTeam.captainId)?.displayName || detailMembers.find(m => m.role === 'capitan')?.displayName || '') : '';
+  const venueObj = detailTeam?.venueId ? MOCK_VENUES.find(v => v.id === detailTeam.venueId) : null;
+
   const inviteResults = inviteSearch.length >= 2 ? searchPlayers(inviteSearch).filter(p => !detailMembers.some(m => m.userId === p.userId)) : [];
+
+  const getTeamName = (id: string) => allTeams.find(t => t.id === id)?.name || id;
 
   return (
     <PageShell title="Equipos">
+      {/* Navigation links */}
+      <div className="flex gap-2 mb-4">
+        <Link to="/equipos/ligas" className="flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+          <Trophy className="h-3.5 w-3.5" /> Ligas
+        </Link>
+      </div>
+
       <div className="flex flex-col gap-3">
         {allTeams.map((team, i) => (
           <button key={team.id} onClick={() => { setShowDetail(team.id); setIsEditing(false); }}
@@ -94,7 +119,6 @@ export default function TeamsPage() {
             <div className="flex-1 min-w-0">
               <h3 className="font-display font-semibold truncate">{team.name}</h3>
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5"><MapPin className="h-3 w-3" />{team.city}</div>
-              {team.description && <p className="text-xs text-muted-foreground mt-1 truncate">{team.description}</p>}
             </div>
             <div className="text-right"><p className="font-display text-xl font-bold text-primary">{team.elo}</p><p className="text-[10px] text-muted-foreground">ELO</p></div>
           </button>
@@ -179,30 +203,77 @@ export default function TeamsPage() {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                   <MapPin className="h-4 w-4" />{detailTeam.city}
                   {detailTeam.postalCode && <span>· CP {detailTeam.postalCode}</span>}
                 </div>
-                {detailTeam.description && <p className="text-sm text-foreground mb-4">{detailTeam.description}</p>}
-
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="rounded-lg bg-muted p-2.5 text-center">
-                    <p className="font-display text-xl font-bold text-primary">{detailTeam.elo}</p>
-                    <p className="text-[10px] text-muted-foreground">ELO</p>
+                {captainName && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <Shield className="h-3 w-3 text-accent" /> Capitán: <span className="font-medium text-foreground">{captainName}</span>
                   </div>
-                  {detailStats && (
-                    <>
-                      <div className="rounded-lg bg-muted p-2.5 text-center">
-                        <p className="font-display text-xl font-bold text-success">{detailStats.wins}</p>
-                        <p className="text-[10px] text-muted-foreground">Victorias</p>
-                      </div>
-                      <div className="rounded-lg bg-muted p-2.5 text-center">
-                        <p className="font-display text-xl font-bold text-destructive">{detailStats.losses}</p>
-                        <p className="text-[10px] text-muted-foreground">Derrotas</p>
-                      </div>
-                    </>
-                  )}
+                )}
+                {venueObj && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                    <MapPin className="h-3 w-3" /> Bar base: <span className="font-medium text-foreground">{venueObj.name}</span>
+                  </div>
+                )}
+                {detailTeam.description && <p className="text-sm text-foreground mb-3">{detailTeam.description}</p>}
+
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-1.5 mb-4">
+                  <div className="rounded-lg bg-muted p-2 text-center">
+                    <p className="font-display text-lg font-bold text-primary">{detailStats?.matchesPlayed || 0}</p>
+                    <p className="text-[9px] text-muted-foreground">PJ</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-2 text-center">
+                    <p className="font-display text-lg font-bold text-success">{detailStats?.wins || 0}</p>
+                    <p className="text-[9px] text-muted-foreground">V</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-2 text-center">
+                    <p className="font-display text-lg font-bold text-destructive">{detailStats?.losses || 0}</p>
+                    <p className="text-[9px] text-muted-foreground">D</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-2 text-center">
+                    <p className="font-display text-lg font-bold text-foreground">{winrate}%</p>
+                    <p className="text-[9px] text-muted-foreground">WR</p>
+                  </div>
                 </div>
+
+                {/* League position */}
+                {teamLeaguePosition && (
+                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 mb-4">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Trophy className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-semibold text-primary">{teamLeaguePosition.leagueName}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Posición <span className="font-bold text-foreground">{teamLeaguePosition.position}º</span> de {teamLeaguePosition.total}
+                    </p>
+                  </div>
+                )}
+
+                {/* Recent matches */}
+                {recentMatches.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                      <Swords className="h-3.5 w-3.5" /> Últimos enfrentamientos
+                    </h4>
+                    <div className="flex flex-col gap-1">
+                      {recentMatches.map(m => {
+                        const isWin = m.winnerId === showDetail;
+                        const opponentId = m.team1Id === showDetail ? m.team2Id : m.team1Id;
+                        return (
+                          <div key={m.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-xs">
+                            <span className="font-medium truncate">{getTeamName(opponentId)}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${isWin ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                              {isWin ? 'V' : 'D'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Members */}
                 <div className="mb-4">
