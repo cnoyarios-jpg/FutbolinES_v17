@@ -746,6 +746,11 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
   if (!tournament) return;
   tournament.mvpPlayerId = mvpUserId;
   tournament.mvpPlayerName = mvpName;
+  
+  // Calculate and save MVP record with context
+  const { avgElo } = calculateTournamentAvgElo(tournamentId);
+  const venue = MOCK_VENUES.find(v => v.id === tournament.venueId);
+  
   if (!isGuestPlayer(mvpUserId)) {
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
@@ -754,7 +759,25 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.general += 15;
       ranking.asGoalkeeper += 10;
       ranking.asForward += 10;
+      
+      // Update tiered achievements
+      updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
+      if (avgElo >= 1600) {
+        const currentHighLevelMvps = getPlayerMvpRecords(mvpUserId).filter(r => r.avgElo >= 1600).length + 1;
+        updatePlayerAchievementProgress(mvpUserId, 'mvp_high_level', currentHighLevelMvps);
+      }
     }
+    
+    // Save MVP record with tournament context
+    saveMvpRecord(mvpUserId, {
+      tournamentId,
+      tournamentName: tournament.name,
+      date: tournament.date,
+      venueName: venue?.name,
+      format: tournament.format,
+      avgElo,
+    });
+    
     checkAndGrantAchievement(mvpUserId, 'mvp_tournament');
   }
   persistRankings();
