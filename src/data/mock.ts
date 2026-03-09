@@ -1,4 +1,4 @@
-import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TeamStats, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType, Season, Achievement, AchievementId, PlayerAchievement, VenueLeague, ResultCorrection } from '@/types';
+import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TeamStats, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType, Season, Achievement, AchievementId, PlayerAchievement, VenueLeague, ResultCorrection, TeamMatch, TeamMatchPairing, TeamLeague, TeamLeagueStanding } from '@/types';
 
 // ===== AUTH STORE =====
 export interface RegisteredUser {
