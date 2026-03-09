@@ -4,12 +4,14 @@ import PageShell from '@/components/PageShell';
 import {
   MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS,
   getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
-  getRegisteredUsers, getUserAchievements, ACHIEVEMENT_DEFINITIONS
+  getRegisteredUsers
 } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, Award, X, Handshake, Medal } from 'lucide-react';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
+import AchievementsSection from '@/components/AchievementsSection';
+import MvpHistorySection from '@/components/MvpHistorySection';
 
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
 
