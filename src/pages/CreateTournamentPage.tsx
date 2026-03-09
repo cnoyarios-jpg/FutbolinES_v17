@@ -56,7 +56,7 @@ export default function CreateTournamentPage() {
       date: form.date || new Date().toISOString().split('T')[0], time: form.time || '18:00',
       venueId: form.venueId, venueName: venue.name, city: venue.city,
       tableBrand: form.tableBrand, playStyle: form.playStyle, format: form.format,
-      pairingMode: form.pairingMode, maxPairs: form.maxPairs, hasWaitlist: false,
+      pairingMode: form.pairingMode, maxPairs: form.maxPairs,
       entryFee: form.entryFee ? parseInt(form.entryFee) : undefined, prizes: form.prizes || undefined,
       organizerId: organizer.id, organizerName: organizer.displayName, requiresApproval: form.requiresApproval,
       status: 'abierto', hasCategories: false, categories: [],
