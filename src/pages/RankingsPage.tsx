@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason } from '@/data/mock';
+import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
 import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
@@ -128,7 +128,7 @@ export default function RankingsPage() {
 
   const pairRankings = getAllPairRankings();
   const venueRankings = getVenueRankings();
-  const teamsSorted = [...MOCK_TEAMS].sort((a, b) => b.elo - a.elo);
+  const teamRanking = getTeamRanking();
   const activeVenues = MOCK_VENUES.filter(v => v.status === 'activo');
 
   const currentSeasonLabel = selectedSeasonId
@@ -317,31 +317,29 @@ export default function RankingsPage() {
       {/* === EQUIPOS === */}
       {tab === 'equipos' && (
         <div className="flex flex-col gap-2">
-          {teamsSorted.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No hay equipos registrados.</p>}
-          {teamsSorted.map((team, i) => {
-            const stats = getTeamStats(team.id);
-            const wr = stats.matchesPlayed > 0 ? Math.round((stats.wins / stats.matchesPlayed) * 100) : 0;
-            return (
-              <Link key={team.id} to={`/equipos/${team.id}`}>
-                <div className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card hover:shadow-elevated transition-shadow">
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{team.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
-                      <MapPin className="h-3 w-3" />{team.city}
-                      {stats.matchesPlayed > 0 && <span>· {wr}% WR</span>}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-display text-lg font-bold text-primary">{team.elo}</p>
-                    <p className="text-[10px] text-muted-foreground">ELO</p>
+          {teamRanking.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No hay equipos registrados.</p>}
+          {teamRanking.map((team, i) => (
+            <Link key={team.id} to={`/equipos/${team.id}`}>
+              <div className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card hover:shadow-elevated transition-shadow">
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{team.name}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
+                    <MapPin className="h-3 w-3" />{team.city}
+                    <span className="text-success">{team.stats.wins}V</span>
+                    <span className="text-destructive">{team.stats.losses}D</span>
+                    {team.winrate > 0 && <span>· {team.winrate}% WR</span>}
                   </div>
                 </div>
-              </Link>
-            );
-          })}
+                <div className="text-right">
+                  <p className="font-display text-lg font-bold text-primary">{team.elo}</p>
+                  <p className="text-[10px] text-muted-foreground">ELO</p>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       )}
 
