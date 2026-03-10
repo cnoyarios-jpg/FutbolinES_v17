@@ -138,8 +138,64 @@ export default function TournamentDetailPage() {
     setGkPlayerType('registrado'); setFwPlayerType('registrado');
     setGkPostalCode(''); setFwPostalCode('');
   };
+  const handleIndividualEnroll = () => {
+    if (!selectedIndividual || !tournament) return;
+    const existing = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
+    if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+    if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
 
-  const handleEnrollPair = () => {
+    const ranking = MOCK_RANKINGS.find(r => r.userId === selectedIndividual.userId);
+    addIndividualEnrollment({
+      id: `ie_${Date.now()}`,
+      tournamentId: tournament.id,
+      userId: selectedIndividual.userId,
+      displayName: selectedIndividual.displayName,
+      elo: ranking?.general || 1500,
+      preferredPosition: ranking?.preferredPosition as any,
+      playerType: (selectedIndividual.playerType as any) || 'registrado',
+    });
+    setSelectedIndividual(null);
+    setIndividualSearch('');
+    toast.success('Jugador inscrito');
+    forceUpdate(n => n + 1);
+  };
+
+  const handleGeneratePairs = () => {
+    if (!tournament) return;
+    const enrollments = getIndividualEnrollments(tournament.id);
+    if (enrollments.length < 2) { toast.error('Se necesitan al menos 2 jugadores'); return; }
+    if (enrollments.length % 2 !== 0) { toast.error('El número de jugadores debe ser par'); return; }
+
+    const pairs = tournament.pairingMode === 'equilibradas'
+      ? generateBalancedPairs(tournament.id)
+      : generateRandomPairs(tournament.id);
+
+    if (pairs.length === 0) { toast.error('No se pudieron generar parejas'); return; }
+    setGeneratedPairs(pairs);
+  };
+
+  const handleConfirmGeneratedPairs = () => {
+    if (!generatedPairs || !tournament) return;
+    confirmGeneratedPairs(tournament.id, generatedPairs);
+    setGeneratedPairs(null);
+    toast.success('¡Parejas confirmadas!');
+    forceUpdate(n => n + 1);
+  };
+
+  const handleTeamEnroll = (teamId: string) => {
+    if (!tournament) return;
+    const t = MOCK_TOURNAMENTS.find(t => t.id === tournament.id);
+    if (!t) return;
+    if (!t.enrolledTeamIds) t.enrolledTeamIds = [];
+    if (t.enrolledTeamIds.includes(teamId)) { toast.error('Este equipo ya está inscrito'); return; }
+    t.enrolledTeamIds.push(teamId);
+    persistTournaments();
+    setShowTeamEnroll(false);
+    toast.success('Equipo inscrito');
+    forceUpdate(n => n + 1);
+  };
+
+
     let gkName = selectedGoalkeeper?.displayName || goalkeeperSearch.trim();
     let fwName = selectedForward?.displayName || forwardSearch.trim();
 
