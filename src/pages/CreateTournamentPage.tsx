@@ -101,6 +101,13 @@ export default function CreateTournamentPage() {
           {FORMATS.map(f => (
             <button key={f.key} onClick={() => update('format', f.key)} className={`rounded-lg border p-3 text-left text-sm font-medium transition ${form.format === f.key ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{f.label}</button>
           ))}
+          <div className="mt-2 border-t border-border pt-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.isTeamTournament} onChange={e => update('isTeamTournament', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />
+              <span className="font-medium">Torneo por equipos</span>
+            </label>
+            <p className="text-xs text-muted-foreground mt-1 ml-6">Los equipos se inscriben y compiten como unidad</p>
+          </div>
         </div>
       );
       case 2: return (
