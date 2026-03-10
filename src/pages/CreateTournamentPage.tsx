@@ -62,6 +62,8 @@ export default function CreateTournamentPage() {
       organizerId: organizer.id, organizerName: organizer.displayName, requiresApproval: form.requiresApproval,
       status: 'abierto', hasCategories: false, categories: [],
       createdAt: new Date().toISOString().split('T')[0],
+      isTeamTournament: form.isTeamTournament || undefined,
+      enrolledTeamIds: form.isTeamTournament ? [] : undefined,
     };
     MOCK_TOURNAMENTS.push(newTournament);
     persistTournaments();
