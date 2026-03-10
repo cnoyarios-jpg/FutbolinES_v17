@@ -1,4 +1,4 @@
-import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TeamStats, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType, Season, Achievement, AchievementId, PlayerAchievement, VenueLeague, ResultCorrection, TeamMatch, TeamMatchPairing, TeamLeague, TeamLeagueStanding } from '@/types';
+import { Venue, VenueTable, Tournament, PlayerRating, User, Team, TeamMember, TeamStats, TournamentPair, Position, TableCondition, TableBrand, Verification, VerificationType, AppNotification, PlayerType, Season, Achievement, AchievementId, PlayerAchievement, VenueLeague, ResultCorrection, TeamMatch, TeamMatchPairing, TeamLeague, TeamLeagueStanding, IndividualEnrollment } from '@/types';
 
 // ===== AUTH STORE =====
 export interface RegisteredUser {
@@ -1283,6 +1283,141 @@ export function getFrequentPartners(userId: string): { partnerId: string; partne
     }
   });
   return Object.entries(partnerMap).map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count })).sort((a, b) => b.count - a.count);
+}
+
+// ===== INDIVIDUAL ENROLLMENTS (for equilibradas/random) =====
+
+const INDIVIDUAL_ENROLLMENTS_KEY = 'futbolines_individual_enrollments';
+
+export function getIndividualEnrollments(tournamentId: string): IndividualEnrollment[] {
+  try {
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    return all.filter(e => e.tournamentId === tournamentId);
+  } catch { return []; }
+}
+
+export function addIndividualEnrollment(enrollment: IndividualEnrollment) {
+  try {
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    if (all.some(e => e.tournamentId === enrollment.tournamentId && e.userId === enrollment.userId)) return;
+    all.push(enrollment);
+    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function removeIndividualEnrollment(tournamentId: string, userId: string) {
+  try {
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    const filtered = all.filter(e => !(e.tournamentId === tournamentId && e.userId === userId));
+    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(filtered));
+  } catch {}
+}
+
+export function generateBalancedPairs(tournamentId: string): TournamentPair[] {
+  const enrollments = getIndividualEnrollments(tournamentId);
+  if (enrollments.length < 2 || enrollments.length % 2 !== 0) return [];
+
+  // Sort by ELO descending
+  const sorted = [...enrollments].sort((a, b) => b.elo - a.elo);
+  const pairs: TournamentPair[] = [];
+
+  // Pair strongest with weakest for balance
+  const half = sorted.length / 2;
+  for (let i = 0; i < half; i++) {
+    const strong = sorted[i];
+    const weak = sorted[sorted.length - 1 - i];
+
+    // Assign positions: respect preferences when possible
+    let goalkeeper = strong;
+    let forward = weak;
+
+    if (strong.preferredPosition === 'delantero' && weak.preferredPosition === 'portero') {
+      goalkeeper = weak;
+      forward = strong;
+    } else if (strong.preferredPosition === 'portero' || weak.preferredPosition === 'delantero') {
+      goalkeeper = strong;
+      forward = weak;
+    } else if (weak.preferredPosition === 'portero' || strong.preferredPosition === 'delantero') {
+      goalkeeper = weak;
+      forward = strong;
+    }
+
+    pairs.push({
+      id: `p_gen_${Date.now()}_${i}`,
+      tournamentId,
+      goalkeeper: {
+        userId: goalkeeper.userId,
+        displayName: goalkeeper.displayName,
+        elo: goalkeeper.elo,
+        playerType: goalkeeper.playerType,
+      },
+      forward: {
+        userId: forward.userId,
+        displayName: forward.displayName,
+        elo: forward.elo,
+        playerType: forward.playerType,
+      },
+      seed: i + 1,
+      status: 'inscrita',
+    });
+  }
+
+  return pairs;
+}
+
+export function generateRandomPairs(tournamentId: string): TournamentPair[] {
+  const enrollments = getIndividualEnrollments(tournamentId);
+  if (enrollments.length < 2 || enrollments.length % 2 !== 0) return [];
+
+  // Shuffle
+  const shuffled = [...enrollments];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const pairs: TournamentPair[] = [];
+  for (let i = 0; i < shuffled.length; i += 2) {
+    const a = shuffled[i];
+    const b = shuffled[i + 1];
+
+    let goalkeeper = a;
+    let forward = b;
+
+    if (a.preferredPosition === 'delantero' && b.preferredPosition === 'portero') {
+      goalkeeper = b;
+      forward = a;
+    } else if (b.preferredPosition === 'portero') {
+      goalkeeper = b;
+      forward = a;
+    }
+
+    pairs.push({
+      id: `p_gen_${Date.now()}_${i / 2}`,
+      tournamentId,
+      goalkeeper: {
+        userId: goalkeeper.userId,
+        displayName: goalkeeper.displayName,
+        elo: goalkeeper.elo,
+        playerType: goalkeeper.playerType,
+      },
+      forward: {
+        userId: forward.userId,
+        displayName: forward.displayName,
+        elo: forward.elo,
+        playerType: forward.playerType,
+      },
+      seed: (i / 2) + 1,
+      status: 'inscrita',
+    });
+  }
+
+  return pairs;
+}
+
+export function confirmGeneratedPairs(tournamentId: string, pairs: TournamentPair[]) {
+  pairs.forEach(p => MOCK_PAIRS.push(p));
+  persistPairs();
 }
 
 // ===== TEAM MATCHES & LEAGUES =====

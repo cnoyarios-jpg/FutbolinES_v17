@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, calculateTournamentAvgElo } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams } from '@/data/mock';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
-import { TournamentPair, RoundRobinMatch } from '@/types';
+import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
 import { toast } from 'sonner';
 
 const formatLabels: Record<string, string> = {
@@ -104,6 +104,23 @@ export default function TournamentDetailPage() {
   const [gkPostalCode, setGkPostalCode] = useState('');
   const [fwPostalCode, setFwPostalCode] = useState('');
 
+  // === INDIVIDUAL ENROLLMENT (equilibradas / random) ===
+  const isIndividualMode = tournament?.pairingMode === 'equilibradas' || tournament?.pairingMode === 'random';
+  const isTeamTournament = tournament?.isTeamTournament || false;
+  const [showIndividualEnroll, setShowIndividualEnroll] = useState(false);
+  const [individualSearch, setIndividualSearch] = useState('');
+  const [selectedIndividual, setSelectedIndividual] = useState<{ userId: string; displayName: string; elo: number; preferredPosition?: string; playerType?: string } | null>(null);
+  const individualEnrollments = tournament ? getIndividualEnrollments(tournament.id) : [];
+  const [generatedPairs, setGeneratedPairs] = useState<TournamentPair[] | null>(null);
+
+  // === TEAM ENROLLMENT ===
+  const [showTeamEnroll, setShowTeamEnroll] = useState(false);
+  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
+
+  const individualSearchResults = useMemo(() => {
+    if (!individualSearch || individualSearch.trim().length < 2) return [];
+    return searchPlayers(individualSearch);
+  }, [individualSearch]);
   const goalkeeperResults = useMemo(() => {
     if (gkPlayerType === 'invitado') return [];
     return searchPlayers(goalkeeperSearch);
@@ -120,6 +137,62 @@ export default function TournamentDetailPage() {
     setSelectedGoalkeeper(null); setSelectedForward(null);
     setGkPlayerType('registrado'); setFwPlayerType('registrado');
     setGkPostalCode(''); setFwPostalCode('');
+  };
+  const handleIndividualEnroll = () => {
+    if (!selectedIndividual || !tournament) return;
+    const existing = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
+    if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+    if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
+
+    const ranking = MOCK_RANKINGS.find(r => r.userId === selectedIndividual.userId);
+    addIndividualEnrollment({
+      id: `ie_${Date.now()}`,
+      tournamentId: tournament.id,
+      userId: selectedIndividual.userId,
+      displayName: selectedIndividual.displayName,
+      elo: ranking?.general || 1500,
+      preferredPosition: ranking?.preferredPosition as any,
+      playerType: (selectedIndividual.playerType as any) || 'registrado',
+    });
+    setSelectedIndividual(null);
+    setIndividualSearch('');
+    toast.success('Jugador inscrito');
+    forceUpdate(n => n + 1);
+  };
+
+  const handleGeneratePairs = () => {
+    if (!tournament) return;
+    const enrollments = getIndividualEnrollments(tournament.id);
+    if (enrollments.length < 2) { toast.error('Se necesitan al menos 2 jugadores'); return; }
+    if (enrollments.length % 2 !== 0) { toast.error('El número de jugadores debe ser par'); return; }
+
+    const pairs = tournament.pairingMode === 'equilibradas'
+      ? generateBalancedPairs(tournament.id)
+      : generateRandomPairs(tournament.id);
+
+    if (pairs.length === 0) { toast.error('No se pudieron generar parejas'); return; }
+    setGeneratedPairs(pairs);
+  };
+
+  const handleConfirmGeneratedPairs = () => {
+    if (!generatedPairs || !tournament) return;
+    confirmGeneratedPairs(tournament.id, generatedPairs);
+    setGeneratedPairs(null);
+    toast.success('¡Parejas confirmadas!');
+    forceUpdate(n => n + 1);
+  };
+
+  const handleTeamEnroll = (teamId: string) => {
+    if (!tournament) return;
+    const t = MOCK_TOURNAMENTS.find(t => t.id === tournament.id);
+    if (!t) return;
+    if (!t.enrolledTeamIds) t.enrolledTeamIds = [];
+    if (t.enrolledTeamIds.includes(teamId)) { toast.error('Este equipo ya está inscrito'); return; }
+    t.enrolledTeamIds.push(teamId);
+    persistTournaments();
+    setShowTeamEnroll(false);
+    toast.success('Equipo inscrito');
+    forceUpdate(n => n + 1);
   };
 
   const handleEnrollPair = () => {
@@ -626,10 +699,132 @@ export default function TournamentDetailPage() {
       })()}
 
 
+      {/* === TEAM ENROLLMENT (for team tournaments) === */}
+      {isTeamTournament && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-sm font-semibold">Equipos inscritos ({tournament.enrolledTeamIds?.length || 0})</h3>
+            {isOrganizer && (
+              <button onClick={() => setShowTeamEnroll(true)} className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95">
+                <Plus className="h-3 w-3" /> Inscribir equipo
+              </button>
+            )}
+          </div>
+          {(tournament.enrolledTeamIds || []).length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {(tournament.enrolledTeamIds || []).map((teamId, i) => {
+                const team = allTeams.find(t => t.id === teamId);
+                const stats = team ? getTeamStats(team.id) : null;
+                return (
+                  <div key={teamId} className="flex items-center gap-3 rounded-lg bg-muted p-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{team?.name || teamId}</p>
+                      <p className="text-[10px] text-muted-foreground">{team?.city} · ELO {team?.elo} · {stats?.wins || 0}V/{stats?.losses || 0}D</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No hay equipos inscritos aún.</p>
+          )}
+        </div>
+      )}
+
+      {/* === INDIVIDUAL ENROLLMENT (equilibradas / random) === */}
+      {isIndividualMode && !isTeamTournament && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-sm font-semibold">Jugadores inscritos ({individualEnrollments.length})</h3>
+            {(tournament.status === 'abierto' || tournament.status === 'en_curso') && (
+              <button onClick={() => setShowIndividualEnroll(true)} className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95">
+                <Plus className="h-3 w-3" /> Añadir jugador
+              </button>
+            )}
+          </div>
+          {individualEnrollments.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {individualEnrollments.map((e, i) => (
+                <div key={e.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-muted-foreground w-5">{i + 1}</span>
+                    <span className="font-medium">{e.displayName}</span>
+                    <span className="text-muted-foreground">ELO {e.elo}</span>
+                    {e.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{e.preferredPosition}</span>}
+                  </div>
+                  {isOrganizer && (
+                    <button onClick={() => { removeIndividualEnrollment(tournament.id, e.userId); forceUpdate(n => n + 1); }} className="text-destructive">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No hay jugadores inscritos. Inscríbelos individualmente.</p>
+          )}
+
+          {/* Odd number warning */}
+          {individualEnrollments.length > 0 && individualEnrollments.length % 2 !== 0 && (
+            <div className="mt-3 rounded-lg bg-warning/10 border border-warning/30 p-3 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning-foreground shrink-0" />
+              <p className="text-xs text-warning-foreground">Número impar de jugadores. Añade uno más para poder generar parejas.</p>
+            </div>
+          )}
+
+          {/* Generate pairs button */}
+          {isOrganizer && individualEnrollments.length >= 2 && individualEnrollments.length % 2 === 0 && pairs.length === 0 && (
+            <button onClick={handleGeneratePairs} className="mt-3 w-full rounded-xl bg-secondary py-3 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]">
+              ⚡ Generar parejas ({tournament.pairingMode === 'equilibradas' ? 'equilibradas' : 'aleatorias'})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* === GENERATED PAIRS PREVIEW === */}
+      {generatedPairs && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+          <h3 className="font-display text-sm font-semibold mb-3">👀 Vista previa de parejas generadas</h3>
+          <div className="flex flex-col gap-2">
+            {generatedPairs.map((pair, i) => {
+              const avgElo = Math.round((pair.goalkeeper.elo + pair.forward.elo) / 2);
+              return (
+                <div key={pair.id} className="rounded-lg bg-muted p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-primary">Pareja {i + 1}</span>
+                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent-foreground">ELO medio: {avgElo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Shield className="h-3 w-3 text-primary shrink-0" />
+                    <span className="text-sm font-medium">{pair.goalkeeper.displayName}</span>
+                    <span className="text-[10px] text-muted-foreground">{pair.goalkeeper.elo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Target className="h-3 w-3 text-secondary shrink-0" />
+                    <span className="text-sm font-medium">{pair.forward.displayName}</span>
+                    <span className="text-[10px] text-muted-foreground">{pair.forward.elo}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => { setGeneratedPairs(null); handleGeneratePairs(); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">
+              🔄 Regenerar
+            </button>
+            <button onClick={handleConfirmGeneratedPairs} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground">
+              ✅ Confirmar parejas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === PAIRS LIST (standard mode or after generation) === */}
       <div className="rounded-xl bg-card p-4 shadow-card mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display text-sm font-semibold">Parejas inscritas ({pairs.length})</h3>
-          {pairs.length < tournament.maxPairs && (
+          {!isIndividualMode && !isTeamTournament && pairs.length < tournament.maxPairs && (
             <button
               onClick={() => setShowEnrollDialog(true)}
               className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95"
@@ -664,7 +859,9 @@ export default function TournamentDetailPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-4">No hay parejas inscritas aún. ¡Añade la primera!</p>
+          <p className="text-sm text-muted-foreground text-center py-4">
+            {isIndividualMode ? 'Las parejas se generarán automáticamente.' : 'No hay parejas inscritas aún. ¡Añade la primera!'}
+          </p>
         )}
       </div>
 
@@ -1212,6 +1409,82 @@ export default function TournamentDetailPage() {
               >
                 Inscribir
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INDIVIDUAL ENROLLMENT DIALOG */}
+      {showIndividualEnroll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Inscribir jugador</h3>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }}>
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </div>
+            {selectedIndividual ? (
+              <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
+                    {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
+                  </div>
+                  <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                </div>
+                {individualSearchResults.length > 0 && (
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
+                    {individualSearchResults.map(p => (
+                      <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">{p.displayName}</span>
+                          {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
+                        </div>
+                        <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={() => { handleIndividualEnroll(); setShowIndividualEnroll(false); }} disabled={!selectedIndividual} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TEAM ENROLLMENT DIALOG */}
+      {showTeamEnroll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Inscribir equipo</h3>
+              <button onClick={() => setShowTeamEnroll(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => (
+                <button key={team.id} onClick={() => handleTeamEnroll(team.id)} className="flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{team.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo}</p>
+                  </div>
+                </button>
+              ))}
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No hay equipos disponibles.</p>
+              )}
             </div>
           </div>
         </div>
