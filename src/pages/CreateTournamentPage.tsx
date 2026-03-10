@@ -36,6 +36,7 @@ export default function CreateTournamentPage() {
     format: 'eliminacion_simple' as TournamentFormat, pairingMode: 'inscripcion' as PairingMode,
     maxPairs: 16, entryFee: '', prizes: '',
     requiresApproval: false,
+    isTeamTournament: false,
   });
   const update = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
 
