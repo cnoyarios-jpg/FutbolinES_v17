@@ -195,7 +195,7 @@ export default function TournamentDetailPage() {
     forceUpdate(n => n + 1);
   };
 
-
+  const handleEnrollPair = () => {
     let gkName = selectedGoalkeeper?.displayName || goalkeeperSearch.trim();
     let fwName = selectedForward?.displayName || forwardSearch.trim();
 
