@@ -104,6 +104,19 @@ export interface Tournament {
   mvpPlayerName?: string;
   checkInOpen?: boolean;
   correctedMatches?: string[];
+  isTeamTournament?: boolean;
+  enrolledTeamIds?: string[];
+}
+
+// Individual enrollment for equilibradas/random modes
+export interface IndividualEnrollment {
+  id: string;
+  tournamentId: string;
+  userId: string;
+  displayName: string;
+  elo: number;
+  preferredPosition?: Position;
+  playerType?: PlayerType;
 }
 
 export interface TournamentCategory {
