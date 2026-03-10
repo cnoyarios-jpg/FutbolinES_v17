@@ -699,10 +699,132 @@ export default function TournamentDetailPage() {
       })()}
 
 
+      {/* === TEAM ENROLLMENT (for team tournaments) === */}
+      {isTeamTournament && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-sm font-semibold">Equipos inscritos ({tournament.enrolledTeamIds?.length || 0})</h3>
+            {isOrganizer && (
+              <button onClick={() => setShowTeamEnroll(true)} className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95">
+                <Plus className="h-3 w-3" /> Inscribir equipo
+              </button>
+            )}
+          </div>
+          {(tournament.enrolledTeamIds || []).length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {(tournament.enrolledTeamIds || []).map((teamId, i) => {
+                const team = allTeams.find(t => t.id === teamId);
+                const stats = team ? getTeamStats(team.id) : null;
+                return (
+                  <div key={teamId} className="flex items-center gap-3 rounded-lg bg-muted p-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-xs font-bold text-primary">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{team?.name || teamId}</p>
+                      <p className="text-[10px] text-muted-foreground">{team?.city} · ELO {team?.elo} · {stats?.wins || 0}V/{stats?.losses || 0}D</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No hay equipos inscritos aún.</p>
+          )}
+        </div>
+      )}
+
+      {/* === INDIVIDUAL ENROLLMENT (equilibradas / random) === */}
+      {isIndividualMode && !isTeamTournament && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-sm font-semibold">Jugadores inscritos ({individualEnrollments.length})</h3>
+            {(tournament.status === 'abierto' || tournament.status === 'en_curso') && (
+              <button onClick={() => setShowIndividualEnroll(true)} className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95">
+                <Plus className="h-3 w-3" /> Añadir jugador
+              </button>
+            )}
+          </div>
+          {individualEnrollments.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {individualEnrollments.map((e, i) => (
+                <div key={e.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-muted-foreground w-5">{i + 1}</span>
+                    <span className="font-medium">{e.displayName}</span>
+                    <span className="text-muted-foreground">ELO {e.elo}</span>
+                    {e.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{e.preferredPosition}</span>}
+                  </div>
+                  {isOrganizer && (
+                    <button onClick={() => { removeIndividualEnrollment(tournament.id, e.userId); forceUpdate(n => n + 1); }} className="text-destructive">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No hay jugadores inscritos. Inscríbelos individualmente.</p>
+          )}
+
+          {/* Odd number warning */}
+          {individualEnrollments.length > 0 && individualEnrollments.length % 2 !== 0 && (
+            <div className="mt-3 rounded-lg bg-warning/10 border border-warning/30 p-3 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning-foreground shrink-0" />
+              <p className="text-xs text-warning-foreground">Número impar de jugadores. Añade uno más para poder generar parejas.</p>
+            </div>
+          )}
+
+          {/* Generate pairs button */}
+          {isOrganizer && individualEnrollments.length >= 2 && individualEnrollments.length % 2 === 0 && pairs.length === 0 && (
+            <button onClick={handleGeneratePairs} className="mt-3 w-full rounded-xl bg-secondary py-3 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]">
+              ⚡ Generar parejas ({tournament.pairingMode === 'equilibradas' ? 'equilibradas' : 'aleatorias'})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* === GENERATED PAIRS PREVIEW === */}
+      {generatedPairs && (
+        <div className="rounded-xl bg-card p-4 shadow-card mb-4 border-2 border-accent/30">
+          <h3 className="font-display text-sm font-semibold mb-3">👀 Vista previa de parejas generadas</h3>
+          <div className="flex flex-col gap-2">
+            {generatedPairs.map((pair, i) => {
+              const avgElo = Math.round((pair.goalkeeper.elo + pair.forward.elo) / 2);
+              return (
+                <div key={pair.id} className="rounded-lg bg-muted p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-primary">Pareja {i + 1}</span>
+                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent-foreground">ELO medio: {avgElo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Shield className="h-3 w-3 text-primary shrink-0" />
+                    <span className="text-sm font-medium">{pair.goalkeeper.displayName}</span>
+                    <span className="text-[10px] text-muted-foreground">{pair.goalkeeper.elo}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Target className="h-3 w-3 text-secondary shrink-0" />
+                    <span className="text-sm font-medium">{pair.forward.displayName}</span>
+                    <span className="text-[10px] text-muted-foreground">{pair.forward.elo}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button onClick={() => { setGeneratedPairs(null); handleGeneratePairs(); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">
+              🔄 Regenerar
+            </button>
+            <button onClick={handleConfirmGeneratedPairs} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground">
+              ✅ Confirmar parejas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === PAIRS LIST (standard mode or after generation) === */}
       <div className="rounded-xl bg-card p-4 shadow-card mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display text-sm font-semibold">Parejas inscritas ({pairs.length})</h3>
-          {pairs.length < tournament.maxPairs && (
+          {!isIndividualMode && !isTeamTournament && pairs.length < tournament.maxPairs && (
             <button
               onClick={() => setShowEnrollDialog(true)}
               className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition active:scale-95"
@@ -737,7 +859,9 @@ export default function TournamentDetailPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-4">No hay parejas inscritas aún. ¡Añade la primera!</p>
+          <p className="text-sm text-muted-foreground text-center py-4">
+            {isIndividualMode ? 'Las parejas se generarán automáticamente.' : 'No hay parejas inscritas aún. ¡Añade la primera!'}
+          </p>
         )}
       </div>
 
