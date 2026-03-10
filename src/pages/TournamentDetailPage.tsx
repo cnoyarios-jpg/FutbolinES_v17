@@ -104,6 +104,23 @@ export default function TournamentDetailPage() {
   const [gkPostalCode, setGkPostalCode] = useState('');
   const [fwPostalCode, setFwPostalCode] = useState('');
 
+  // === INDIVIDUAL ENROLLMENT (equilibradas / random) ===
+  const isIndividualMode = tournament?.pairingMode === 'equilibradas' || tournament?.pairingMode === 'random';
+  const isTeamTournament = tournament?.isTeamTournament || false;
+  const [showIndividualEnroll, setShowIndividualEnroll] = useState(false);
+  const [individualSearch, setIndividualSearch] = useState('');
+  const [selectedIndividual, setSelectedIndividual] = useState<{ userId: string; displayName: string; elo: number; preferredPosition?: string; playerType?: string } | null>(null);
+  const individualEnrollments = tournament ? getIndividualEnrollments(tournament.id) : [];
+  const [generatedPairs, setGeneratedPairs] = useState<TournamentPair[] | null>(null);
+
+  // === TEAM ENROLLMENT ===
+  const [showTeamEnroll, setShowTeamEnroll] = useState(false);
+  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
+
+  const individualSearchResults = useMemo(() => {
+    if (!individualSearch || individualSearch.trim().length < 2) return [];
+    return searchPlayers(individualSearch);
+  }, [individualSearch]);
   const goalkeeperResults = useMemo(() => {
     if (gkPlayerType === 'invitado') return [];
     return searchPlayers(goalkeeperSearch);
