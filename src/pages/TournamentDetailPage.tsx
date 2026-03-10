@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, calculateTournamentAvgElo } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams } from '@/data/mock';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch } from '@/types';
