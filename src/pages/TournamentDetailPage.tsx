@@ -1413,6 +1413,82 @@ export default function TournamentDetailPage() {
           </div>
         </div>
       )}
+
+      {/* INDIVIDUAL ENROLLMENT DIALOG */}
+      {showIndividualEnroll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Inscribir jugador</h3>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }}>
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </div>
+            {selectedIndividual ? (
+              <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
+                    {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
+                  </div>
+                  <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                </div>
+                {individualSearchResults.length > 0 && (
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
+                    {individualSearchResults.map(p => (
+                      <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">{p.displayName}</span>
+                          {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
+                        </div>
+                        <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={() => { handleIndividualEnroll(); setShowIndividualEnroll(false); }} disabled={!selectedIndividual} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TEAM ENROLLMENT DIALOG */}
+      {showTeamEnroll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Inscribir equipo</h3>
+              <button onClick={() => setShowTeamEnroll(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => (
+                <button key={team.id} onClick={() => handleTeamEnroll(team.id)} className="flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{team.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo}</p>
+                  </div>
+                </button>
+              ))}
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No hay equipos disponibles.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
