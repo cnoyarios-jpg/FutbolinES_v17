@@ -1208,7 +1208,7 @@ export default function TournamentDetailPage() {
       )}
 
 
-      {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
+      {!isTeamTournament && !isIndividualMode && (tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
         <button
           onClick={() => setShowEnrollDialog(true)}
           className="w-full rounded-xl bg-secondary py-3.5 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]"
