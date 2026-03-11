@@ -1565,14 +1565,22 @@ export default function TournamentDetailPage() {
               <button onClick={() => setShowTeamEnroll(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
             </div>
             <div className="flex flex-col gap-2">
-              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => (
-                <button key={team.id} onClick={() => handleTeamEnroll(team.id)} className="flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{team.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo}</p>
-                  </div>
-                </button>
-              ))}
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => {
+                const members = getTeamMembers(team.id).filter(m => m.status === 'aceptada');
+                const hasEnoughMembers = members.length >= 2;
+                return (
+                  <button key={team.id} onClick={() => {
+                    if (!hasEnoughMembers) { toast.error(`El equipo "${team.name}" necesita al menos 2 miembros para competir`); return; }
+                    handleTeamEnroll(team.id);
+                  }} className={`flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full ${!hasEnoughMembers ? 'opacity-60' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{team.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo} · {members.length} miembros</p>
+                      {!hasEnoughMembers && <p className="text-[9px] text-destructive mt-0.5">⚠ Necesita más miembros</p>}
+                    </div>
+                  </button>
+                );
+              })}
               {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No hay equipos disponibles.</p>
               )}
