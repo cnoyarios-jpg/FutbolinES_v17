@@ -21,6 +21,9 @@ export default function TeamsPage() {
 
   const currentUser = getCurrentUser();
 
+  // Fix inconsistent teams on load
+  useState(() => { fixTeamMemberConsistency(); });
+
   const [form, setForm] = useState({ name: '', city: '', postalCode: '', description: '', venueId: '' });
   const [editForm, setEditForm] = useState({ name: '', city: '', description: '' });
   const [isEditing, setIsEditing] = useState(false);
