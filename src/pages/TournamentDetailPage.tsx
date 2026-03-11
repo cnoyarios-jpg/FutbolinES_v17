@@ -1467,46 +1467,86 @@ export default function TournamentDetailPage() {
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-lg font-bold">Inscribir jugador</h3>
-              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }}>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); setIndividualPlayerType('registrado'); setIndividualGuestPostalCode(''); setIndividualGuestPosition(''); }}>
                 <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
-            {selectedIndividual ? (
-              <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
-                    {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
-                  </div>
-                  <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+
+            {/* Player type toggle */}
+            <div className="flex gap-1 mb-3">
+              <button onClick={() => { setIndividualPlayerType('registrado'); setSelectedIndividual(null); setIndividualSearch(''); }}
+                className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${individualPlayerType === 'registrado' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                <UserCheck className="h-3 w-3" /> Registrado
+              </button>
+              <button onClick={() => { setIndividualPlayerType('invitado'); setSelectedIndividual(null); setIndividualSearch(''); }}
+                className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${individualPlayerType === 'invitado' ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground'}`}>
+                <UserPlus className="h-3 w-3" /> Invitado
+              </button>
+            </div>
+
+            {individualPlayerType === 'invitado' ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Nombre del invitado *</label>
+                  <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Nombre..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
                 </div>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Código postal (opcional)</label>
+                  <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ej: 28001" value={individualGuestPostalCode} onChange={e => setIndividualGuestPostalCode(e.target.value)} />
                 </div>
-                {individualSearchResults.length > 0 && (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
-                    {individualSearchResults.map(p => (
-                      <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium">{p.displayName}</span>
-                          {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
-                        </div>
-                        <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Posición preferida (opcional)</label>
+                  <div className="flex gap-1 mt-1">
+                    {(['', 'portero', 'delantero'] as const).map(pos => (
+                      <button key={pos} onClick={() => setIndividualGuestPosition(pos)}
+                        className={`flex-1 rounded-lg py-1.5 text-[11px] font-medium transition ${individualGuestPosition === pos ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        {pos === '' ? 'Sin preferencia' : pos.charAt(0).toUpperCase() + pos.slice(1)}
                       </button>
                     ))}
                   </div>
+                </div>
+                <p className="text-[10px] text-warning-foreground flex items-center gap-1">👤 Se usará ELO neutro (1500). No afecta al ranking global.</p>
+              </div>
+            ) : (
+              <>
+                {selectedIndividual ? (
+                  <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
+                        {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
+                      </div>
+                      <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                    </div>
+                    {individualSearchResults.length > 0 && (
+                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
+                        {individualSearchResults.map(p => (
+                          <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{p.displayName}</span>
+                              {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
+                            </div>
+                            <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
             <div className="mt-4 flex gap-2">
-              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
-              <button onClick={() => { handleIndividualEnroll(); setShowIndividualEnroll(false); }} disabled={!selectedIndividual} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); setIndividualPlayerType('registrado'); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={() => { handleIndividualEnroll(); if (individualPlayerType === 'registrado') setShowIndividualEnroll(false); }} disabled={individualPlayerType === 'registrado' ? !selectedIndividual : individualSearch.trim().length < 2} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
             </div>
           </div>
         </div>
