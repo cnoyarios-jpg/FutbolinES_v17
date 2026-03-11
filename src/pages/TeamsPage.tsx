@@ -6,7 +6,7 @@ import {
   getCurrentUser, saveTeam, updateTeam, deleteTeam,
   getTeamMembers, addTeamMember, respondTeamInvite, getTeamStats,
   searchPlayers, addNotification, getTeamMatchesForTeam, getTeamLeagues,
-  getTeamLeagueStandings, getStoredTeams,
+  getTeamLeagueStandings, getStoredTeams, fixTeamMemberConsistency,
 } from '@/data/mock';
 import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
@@ -20,6 +20,9 @@ export default function TeamsPage() {
   const [, forceUpdate] = useState(0);
 
   const currentUser = getCurrentUser();
+
+  // Fix inconsistent teams on load
+  useState(() => { fixTeamMemberConsistency(); });
 
   const [form, setForm] = useState({ name: '', city: '', postalCode: '', description: '', venueId: '' });
   const [editForm, setEditForm] = useState({ name: '', city: '', description: '' });

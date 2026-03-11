@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency } from '@/data/mock';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
@@ -60,6 +60,9 @@ export default function TournamentDetailPage() {
   const isRoundRobin = tournament?.format === 'round_robin';
   const isKingMode = tournament?.format === 'rey_mesa';
 
+  // Fix team member consistency on load
+  useState(() => { fixTeamMemberConsistency(); });
+
   // Bracket state (elimination)
   const [bracket, setBracket] = useState<BracketMatch[][]>(() =>
     !isRoundRobin && !isKingMode && pairs.length > 0 ? generateBracket(pairs) : []
@@ -110,6 +113,9 @@ export default function TournamentDetailPage() {
   const [showIndividualEnroll, setShowIndividualEnroll] = useState(false);
   const [individualSearch, setIndividualSearch] = useState('');
   const [selectedIndividual, setSelectedIndividual] = useState<{ userId: string; displayName: string; elo: number; preferredPosition?: string; playerType?: string } | null>(null);
+  const [individualPlayerType, setIndividualPlayerType] = useState<'registrado' | 'invitado'>('registrado');
+  const [individualGuestPostalCode, setIndividualGuestPostalCode] = useState('');
+  const [individualGuestPosition, setIndividualGuestPosition] = useState<'portero' | 'delantero' | ''>('');
   const individualEnrollments = tournament ? getIndividualEnrollments(tournament.id) : [];
   const [generatedPairs, setGeneratedPairs] = useState<TournamentPair[] | null>(null);
 
@@ -139,9 +145,38 @@ export default function TournamentDetailPage() {
     setGkPostalCode(''); setFwPostalCode('');
   };
   const handleIndividualEnroll = () => {
-    if (!selectedIndividual || !tournament) return;
-    const existing = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
-    if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+    if (!tournament) return;
+    
+    // Guest enrollment
+    if (individualPlayerType === 'invitado') {
+      const guestName = individualSearch.trim();
+      if (!guestName || guestName.length < 2) { toast.error('Nombre del invitado obligatorio (mín. 2 caracteres)'); return; }
+      const existing = individualEnrollments.find(e => e.displayName.toLowerCase() === guestName.toLowerCase());
+      if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+      if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
+      
+      const guest = createGuestPlayer(guestName, individualGuestPostalCode || undefined);
+      addIndividualEnrollment({
+        id: `ie_${Date.now()}`,
+        tournamentId: tournament.id,
+        userId: guest.id,
+        displayName: guest.displayName,
+        elo: 1500, // neutral ELO for guests
+        preferredPosition: individualGuestPosition || undefined,
+        playerType: 'invitado',
+      });
+      setIndividualSearch('');
+      setIndividualGuestPostalCode('');
+      setIndividualGuestPosition('');
+      toast.success('Invitado inscrito');
+      forceUpdate(n => n + 1);
+      return;
+    }
+    
+    // Registered player enrollment
+    if (!selectedIndividual) return;
+    const existingEnrollment = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
+    if (existingEnrollment) { toast.error('Este jugador ya está inscrito'); return; }
     if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
 
     const ranking = MOCK_RANKINGS.find(r => r.userId === selectedIndividual.userId);
@@ -177,8 +212,23 @@ export default function TournamentDetailPage() {
   const handleConfirmGeneratedPairs = () => {
     if (!generatedPairs || !tournament) return;
     confirmGeneratedPairs(tournament.id, generatedPairs);
+    
+    // Generate bracket/matches based on tournament format
+    const confirmedPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
+    if (confirmedPairs.length >= 2) {
+      if (isRoundRobin) {
+        setRrMatches(generateRoundRobinMatches(confirmedPairs));
+      } else if (isKingMode) {
+        setKingCourtPairId(confirmedPairs[0].id);
+        setKingCurrentChallenger(confirmedPairs[1].id);
+        setKingQueue(confirmedPairs.slice(2).map(p => p.id));
+      } else {
+        setBracket(generateBracket(confirmedPairs));
+      }
+    }
+    
     setGeneratedPairs(null);
-    toast.success('¡Parejas confirmadas!');
+    toast.success('¡Parejas confirmadas! El torneo está listo para comenzar.');
     forceUpdate(n => n + 1);
   };
 
@@ -752,6 +802,7 @@ export default function TournamentDetailPage() {
                     <span className="font-medium">{e.displayName}</span>
                     <span className="text-muted-foreground">ELO {e.elo}</span>
                     {e.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{e.preferredPosition}</span>}
+                    {e.playerType === 'invitado' && <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-semibold text-warning-foreground">👤 Inv.</span>}
                   </div>
                   {isOrganizer && (
                     <button onClick={() => { removeIndividualEnrollment(tournament.id, e.userId); forceUpdate(n => n + 1); }} className="text-destructive">
@@ -1161,7 +1212,7 @@ export default function TournamentDetailPage() {
       )}
 
 
-      {(tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
+      {!isTeamTournament && !isIndividualMode && (tournament.status === 'abierto' || tournament.status === 'en_curso') && pairs.length < tournament.maxPairs && (
         <button
           onClick={() => setShowEnrollDialog(true)}
           className="w-full rounded-xl bg-secondary py-3.5 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]"
@@ -1420,46 +1471,86 @@ export default function TournamentDetailPage() {
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-lg font-bold">Inscribir jugador</h3>
-              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }}>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); setIndividualPlayerType('registrado'); setIndividualGuestPostalCode(''); setIndividualGuestPosition(''); }}>
                 <X className="h-5 w-5 text-muted-foreground" />
               </button>
             </div>
-            {selectedIndividual ? (
-              <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
-                    {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
-                  </div>
-                  <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+
+            {/* Player type toggle */}
+            <div className="flex gap-1 mb-3">
+              <button onClick={() => { setIndividualPlayerType('registrado'); setSelectedIndividual(null); setIndividualSearch(''); }}
+                className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${individualPlayerType === 'registrado' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                <UserCheck className="h-3 w-3" /> Registrado
+              </button>
+              <button onClick={() => { setIndividualPlayerType('invitado'); setSelectedIndividual(null); setIndividualSearch(''); }}
+                className={`flex items-center gap-1 flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition ${individualPlayerType === 'invitado' ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground'}`}>
+                <UserPlus className="h-3 w-3" /> Invitado
+              </button>
+            </div>
+
+            {individualPlayerType === 'invitado' ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Nombre del invitado *</label>
+                  <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Nombre..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
                 </div>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Código postal (opcional)</label>
+                  <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ej: 28001" value={individualGuestPostalCode} onChange={e => setIndividualGuestPostalCode(e.target.value)} />
                 </div>
-                {individualSearchResults.length > 0 && (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
-                    {individualSearchResults.map(p => (
-                      <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium">{p.displayName}</span>
-                          {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
-                        </div>
-                        <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase">Posición preferida (opcional)</label>
+                  <div className="flex gap-1 mt-1">
+                    {(['', 'portero', 'delantero'] as const).map(pos => (
+                      <button key={pos} onClick={() => setIndividualGuestPosition(pos)}
+                        className={`flex-1 rounded-lg py-1.5 text-[11px] font-medium transition ${individualGuestPosition === pos ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        {pos === '' ? 'Sin preferencia' : pos.charAt(0).toUpperCase() + pos.slice(1)}
                       </button>
                     ))}
                   </div>
+                </div>
+                <p className="text-[10px] text-warning-foreground flex items-center gap-1">👤 Se usará ELO neutro (1500). No afecta al ranking global.</p>
+              </div>
+            ) : (
+              <>
+                {selectedIndividual ? (
+                  <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">{selectedIndividual.displayName}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">ELO: {selectedIndividual.elo}</span>
+                        {selectedIndividual.preferredPosition && <span className="ml-1 text-xs text-primary capitalize">({selectedIndividual.preferredPosition})</span>}
+                      </div>
+                      <button onClick={() => { setSelectedIndividual(null); setIndividualSearch(''); }}><X className="h-4 w-4 text-muted-foreground" /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input className="w-full rounded-lg border border-input bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Buscar jugador..." value={individualSearch} onChange={e => setIndividualSearch(e.target.value)} />
+                    </div>
+                    {individualSearchResults.length > 0 && (
+                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card">
+                        {individualSearchResults.map(p => (
+                          <button key={p.userId} onClick={() => { setSelectedIndividual({ userId: p.userId, displayName: p.displayName, elo: p.general, preferredPosition: p.preferredPosition, playerType: p.playerType }); setIndividualSearch(''); }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted transition">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium">{p.displayName}</span>
+                              {p.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{p.preferredPosition}</span>}
+                            </div>
+                            <span className="text-xs text-muted-foreground">ELO: {p.general}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
             <div className="mt-4 flex gap-2">
-              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
-              <button onClick={() => { handleIndividualEnroll(); setShowIndividualEnroll(false); }} disabled={!selectedIndividual} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
+              <button onClick={() => { setShowIndividualEnroll(false); setIndividualSearch(''); setSelectedIndividual(null); setIndividualPlayerType('registrado'); }} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
+              <button onClick={() => { handleIndividualEnroll(); if (individualPlayerType === 'registrado') setShowIndividualEnroll(false); }} disabled={individualPlayerType === 'registrado' ? !selectedIndividual : individualSearch.trim().length < 2} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">Inscribir</button>
             </div>
           </div>
         </div>
@@ -1474,14 +1565,22 @@ export default function TournamentDetailPage() {
               <button onClick={() => setShowTeamEnroll(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
             </div>
             <div className="flex flex-col gap-2">
-              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => (
-                <button key={team.id} onClick={() => handleTeamEnroll(team.id)} className="flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{team.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo}</p>
-                  </div>
-                </button>
-              ))}
+              {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).map(team => {
+                const members = getTeamMembers(team.id).filter(m => m.status === 'aceptada');
+                const hasEnoughMembers = members.length >= 2;
+                return (
+                  <button key={team.id} onClick={() => {
+                    if (!hasEnoughMembers) { toast.error(`El equipo "${team.name}" necesita al menos 2 miembros para competir`); return; }
+                    handleTeamEnroll(team.id);
+                  }} className={`flex items-center gap-3 rounded-lg bg-muted p-3 text-left hover:bg-primary/5 transition w-full ${!hasEnoughMembers ? 'opacity-60' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{team.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{team.city} · ELO {team.elo} · {members.length} miembros</p>
+                      {!hasEnoughMembers && <p className="text-[9px] text-destructive mt-0.5">⚠ Necesita más miembros</p>}
+                    </div>
+                  </button>
+                );
+              })}
               {allTeams.filter(t => !(tournament.enrolledTeamIds || []).includes(t.id)).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No hay equipos disponibles.</p>
               )}
