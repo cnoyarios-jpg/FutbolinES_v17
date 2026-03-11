@@ -1417,7 +1417,38 @@ export function generateRandomPairs(tournamentId: string): TournamentPair[] {
 
 export function confirmGeneratedPairs(tournamentId: string, pairs: TournamentPair[]) {
   pairs.forEach(p => MOCK_PAIRS.push(p));
+  // Change tournament status to en_curso so bracket can start
+  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
+  if (tournament && tournament.status === 'abierto') {
+    tournament.status = 'en_curso';
+    persistTournaments();
+  }
   persistPairs();
+}
+
+// Fix inconsistent teams: ensure captain is always a member
+export function fixTeamMemberConsistency() {
+  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
+  allTeams.forEach(team => {
+    const members = getTeamMembers(team.id);
+    const captainIsMember = members.some(m => m.userId === team.captainId);
+    if (!captainIsMember && team.captainId) {
+      // Find captain display name from rankings or registered users
+      const ranking = MOCK_RANKINGS.find(r => r.userId === team.captainId);
+      const regUsers = getRegisteredUsers();
+      const regUser = regUsers.find(u => u.id === team.captainId);
+      const displayName = ranking?.displayName || regUser?.displayName || 'Capitán';
+      addTeamMember({
+        id: `tm_fix_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        teamId: team.id,
+        userId: team.captainId,
+        displayName,
+        role: 'capitan',
+        joinedAt: team.createdAt,
+        status: 'aceptada',
+      });
+    }
+  });
 }
 
 // ===== TEAM MATCHES & LEAGUES =====

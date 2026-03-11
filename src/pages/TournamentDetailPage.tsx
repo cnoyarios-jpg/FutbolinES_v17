@@ -177,8 +177,23 @@ export default function TournamentDetailPage() {
   const handleConfirmGeneratedPairs = () => {
     if (!generatedPairs || !tournament) return;
     confirmGeneratedPairs(tournament.id, generatedPairs);
+    
+    // Generate bracket/matches based on tournament format
+    const confirmedPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
+    if (confirmedPairs.length >= 2) {
+      if (isRoundRobin) {
+        setRrMatches(generateRoundRobinMatches(confirmedPairs));
+      } else if (isKingMode) {
+        setKingCourtPairId(confirmedPairs[0].id);
+        setKingCurrentChallenger(confirmedPairs[1].id);
+        setKingQueue(confirmedPairs.slice(2).map(p => p.id));
+      } else {
+        setBracket(generateBracket(confirmedPairs));
+      }
+    }
+    
     setGeneratedPairs(null);
-    toast.success('¡Parejas confirmadas!');
+    toast.success('¡Parejas confirmadas! El torneo está listo para comenzar.');
     forceUpdate(n => n + 1);
   };
 
