@@ -142,9 +142,38 @@ export default function TournamentDetailPage() {
     setGkPostalCode(''); setFwPostalCode('');
   };
   const handleIndividualEnroll = () => {
-    if (!selectedIndividual || !tournament) return;
-    const existing = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
-    if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+    if (!tournament) return;
+    
+    // Guest enrollment
+    if (individualPlayerType === 'invitado') {
+      const guestName = individualSearch.trim();
+      if (!guestName || guestName.length < 2) { toast.error('Nombre del invitado obligatorio (mín. 2 caracteres)'); return; }
+      const existing = individualEnrollments.find(e => e.displayName.toLowerCase() === guestName.toLowerCase());
+      if (existing) { toast.error('Este jugador ya está inscrito'); return; }
+      if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
+      
+      const guest = createGuestPlayer(guestName, individualGuestPostalCode || undefined);
+      addIndividualEnrollment({
+        id: `ie_${Date.now()}`,
+        tournamentId: tournament.id,
+        userId: guest.id,
+        displayName: guest.displayName,
+        elo: 1500, // neutral ELO for guests
+        preferredPosition: individualGuestPosition || undefined,
+        playerType: 'invitado',
+      });
+      setIndividualSearch('');
+      setIndividualGuestPostalCode('');
+      setIndividualGuestPosition('');
+      toast.success('Invitado inscrito');
+      forceUpdate(n => n + 1);
+      return;
+    }
+    
+    // Registered player enrollment
+    if (!selectedIndividual) return;
+    const existingEnrollment = individualEnrollments.find(e => e.userId === selectedIndividual.userId);
+    if (existingEnrollment) { toast.error('Este jugador ya está inscrito'); return; }
     if (individualEnrollments.length >= tournament.maxPairs * 2) { toast.error('Límite de jugadores alcanzado'); return; }
 
     const ranking = MOCK_RANKINGS.find(r => r.userId === selectedIndividual.userId);
