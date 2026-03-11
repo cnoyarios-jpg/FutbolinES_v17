@@ -60,6 +60,9 @@ export default function TournamentDetailPage() {
   const isRoundRobin = tournament?.format === 'round_robin';
   const isKingMode = tournament?.format === 'rey_mesa';
 
+  // Fix team member consistency on load
+  useState(() => { fixTeamMemberConsistency(); });
+
   // Bracket state (elimination)
   const [bracket, setBracket] = useState<BracketMatch[][]>(() =>
     !isRoundRobin && !isKingMode && pairs.length > 0 ? generateBracket(pairs) : []
