@@ -802,6 +802,7 @@ export default function TournamentDetailPage() {
                     <span className="font-medium">{e.displayName}</span>
                     <span className="text-muted-foreground">ELO {e.elo}</span>
                     {e.preferredPosition && <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary capitalize">{e.preferredPosition}</span>}
+                    {e.playerType === 'invitado' && <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-semibold text-warning-foreground">👤 Inv.</span>}
                   </div>
                   {isOrganizer && (
                     <button onClick={() => { removeIndividualEnrollment(tournament.id, e.userId); forceUpdate(n => n + 1); }} className="text-destructive">
