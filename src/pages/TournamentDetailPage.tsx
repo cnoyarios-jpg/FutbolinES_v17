@@ -110,6 +110,9 @@ export default function TournamentDetailPage() {
   const [showIndividualEnroll, setShowIndividualEnroll] = useState(false);
   const [individualSearch, setIndividualSearch] = useState('');
   const [selectedIndividual, setSelectedIndividual] = useState<{ userId: string; displayName: string; elo: number; preferredPosition?: string; playerType?: string } | null>(null);
+  const [individualPlayerType, setIndividualPlayerType] = useState<'registrado' | 'invitado'>('registrado');
+  const [individualGuestPostalCode, setIndividualGuestPostalCode] = useState('');
+  const [individualGuestPosition, setIndividualGuestPosition] = useState<'portero' | 'delantero' | ''>('');
   const individualEnrollments = tournament ? getIndividualEnrollments(tournament.id) : [];
   const [generatedPairs, setGeneratedPairs] = useState<TournamentPair[] | null>(null);
 
