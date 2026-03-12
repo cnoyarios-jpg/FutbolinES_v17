@@ -1,5 +1,7 @@
 import { Tournament } from '@/types';
-import { Calendar, MapPin, Users } from 'lucide-react';
+import { Calendar, MapPin, Users, Trophy } from 'lucide-react';
+import { getDivision } from '@/lib/divisions';
+import { calculateTournamentAvgElo } from '@/data/mock';
 
 interface TournamentCardProps {
   tournament: Tournament;
