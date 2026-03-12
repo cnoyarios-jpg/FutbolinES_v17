@@ -391,6 +391,14 @@ export default function TournamentDetailPage() {
 
       setEloChanges(prev => [...prev, { matchKey, changes }]);
       persistRankings();
+      // Record ELO history & activity for each player
+      changes.forEach(c => {
+        const r = MOCK_RANKINGS.find(r => r.userId === c.userId);
+        if (r && !isGuestPlayer(c.userId)) {
+          recordEloHistory(c.userId, r.general);
+          addActivityEntry({ userId: c.userId, type: c.change > 0 ? 'match_win' : 'match_loss', description: (c.change > 0 ? 'Victoria' : 'Derrota') + ' en ' + (tournament?.name || 'torneo'), eloChange: c.change, date: new Date().toISOString() });
+        }
+      });
       toast.success('Ganador registrado. ELO actualizado.');
     }
   }, [id]);
