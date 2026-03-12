@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry } from '@/data/mock';
+import { getDivision } from '@/lib/divisions';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
@@ -390,6 +391,14 @@ export default function TournamentDetailPage() {
 
       setEloChanges(prev => [...prev, { matchKey, changes }]);
       persistRankings();
+      // Record ELO history & activity for each player
+      changes.forEach(c => {
+        const r = MOCK_RANKINGS.find(r => r.userId === c.userId);
+        if (r && !isGuestPlayer(c.userId)) {
+          recordEloHistory(c.userId, r.general);
+          addActivityEntry({ userId: c.userId, type: c.change > 0 ? 'match_win' : 'match_loss', description: (c.change > 0 ? 'Victoria' : 'Derrota') + ' en ' + (tournament?.name || 'torneo'), eloChange: c.change, date: new Date().toISOString() });
+        }
+      });
       toast.success('Ganador registrado. ELO actualizado.');
     }
   }, [id]);
@@ -658,11 +667,15 @@ export default function TournamentDetailPage() {
           {/* ELO medio del torneo */}
           {(() => {
             const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
+            const div = registeredCount >= 2 ? getDivision(avgElo) : null;
             return (
               <div className="flex items-center gap-2">
                 <Trophy className="h-4 w-4 shrink-0 text-accent" />
                 {registeredCount >= 2 ? (
-                  <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
+                  <>
+                    <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
+                    {div && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.fullName}</span>}
+                  </>
                 ) : (
                   <span className="text-muted-foreground text-xs">ELO medio: sin datos suficientes</span>
                 )}

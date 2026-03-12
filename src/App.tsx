@@ -16,6 +16,8 @@ import TeamsPage from "@/pages/TeamsPage";
 import TeamLeaguePage from "@/pages/TeamLeaguePage";
 import VenueDetailPage from "@/pages/VenueDetailPage";
 import LoginPage from "@/pages/LoginPage";
+import MyTeamPage from "@/pages/MyTeamPage";
+import NotificationsPage from "@/pages/NotificationsPage";
 import NotFound from "./pages/NotFound";
 import { getCurrentUser, logoutUser } from "@/data/mock";
 
@@ -56,6 +58,8 @@ const App = () => {
               <Route path="/equipos/ligas" element={<TeamLeaguePage />} />
               <Route path="/equipos/:teamId" element={<TeamsPage />} />
               <Route path="/locales/:id" element={<VenueDetailPage />} />
+              <Route path="/mi-equipo" element={<MyTeamPage />} />
+              <Route path="/notificaciones" element={<NotificationsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <BottomNav />

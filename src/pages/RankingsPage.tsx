@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
+import { getDivision } from '@/lib/divisions';
 import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
@@ -265,7 +266,12 @@ export default function RankingsPage() {
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{player.displayName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold truncate">{player.displayName}</p>
+                      {(() => { const div = getDivision(getElo(player)); return (
+                        <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.sublevel}</span>
+                      ); })()}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <p className="text-[10px] text-muted-foreground">{player.city}</p>
                       {player.preferredPosition && (

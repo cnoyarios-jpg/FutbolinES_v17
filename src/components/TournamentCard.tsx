@@ -1,5 +1,7 @@
 import { Tournament } from '@/types';
-import { Calendar, MapPin, Users } from 'lucide-react';
+import { Calendar, MapPin, Users, Trophy } from 'lucide-react';
+import { getDivision } from '@/lib/divisions';
+import { calculateTournamentAvgElo } from '@/data/mock';
 
 interface TournamentCardProps {
   tournament: Tournament;
@@ -56,6 +58,12 @@ export default function TournamentCard({ tournament, onClick }: TournamentCardPr
             <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formattedDate}</span>
             <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{tournament.city}</span>
             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tournament.maxPairs}</span>
+            {(() => {
+              const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
+              if (registeredCount < 2) return null;
+              const div = getDivision(avgElo);
+              return <span className={`flex items-center gap-1 font-semibold ${div.colorClass}`}><Trophy className="h-3 w-3" />{div.emoji} {avgElo}</span>;
+            })()}
           </div>
         </div>
         <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusColors[tournament.status]}`}>

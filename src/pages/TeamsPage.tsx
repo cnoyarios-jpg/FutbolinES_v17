@@ -7,6 +7,7 @@ import {
   getTeamMembers, addTeamMember, respondTeamInvite, getTeamStats,
   searchPlayers, addNotification, getTeamMatchesForTeam, getTeamLeagues,
   getTeamLeagueStandings, getStoredTeams, fixTeamMemberConsistency,
+  getTeamJoinRequests, createJoinRequest, respondJoinRequest,
 } from '@/data/mock';
 import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
@@ -84,6 +85,8 @@ export default function TeamsPage() {
   const detailMembers = showDetail ? getTeamMembers(showDetail) : [];
   const detailStats = showDetail ? getTeamStats(showDetail) : null;
   const isCaptain = detailTeam && currentUser && detailTeam.captainId === currentUser.id;
+  const pendingRequests = showDetail ? getTeamJoinRequests(showDetail).filter(r => r.status === 'pendiente') : [];
+  const isMember = currentUser ? detailMembers.some(m => m.userId === currentUser.id) : false;
 
   // Enhanced profile data
   const recentMatches = showDetail ? getTeamMatchesForTeam(showDetail).filter(m => m.status === 'finalizado').slice(-5).reverse() : [];
@@ -104,6 +107,15 @@ export default function TeamsPage() {
   const inviteResults = inviteSearch.length >= 2 ? searchPlayers(inviteSearch).filter(p => !detailMembers.some(m => m.userId === p.userId)) : [];
 
   const getTeamName = (id: string) => allTeams.find(t => t.id === id)?.name || id;
+
+  const handleJoinRequest = () => {
+    if (!currentUser || !detailTeam) return;
+    const result = createJoinRequest(detailTeam.id, currentUser.id, currentUser.displayName);
+    if (result.success) { toast.success('Solicitud enviada'); forceUpdate(n => n + 1); }
+    else { toast.error(result.error || 'Error'); }
+  };
+  const handleAcceptRequest = (reqId: string) => { respondJoinRequest(reqId, true); toast.success('Solicitud aceptada'); forceUpdate(n => n + 1); };
+  const handleRejectRequest = (reqId: string) => { respondJoinRequest(reqId, false); toast.success('Solicitud rechazada'); forceUpdate(n => n + 1); };
 
   return (
     <PageShell title="Equipos">
@@ -301,6 +313,21 @@ export default function TeamsPage() {
                   </div>
                 </div>
 
+                {/* Pending join requests (captain only) */}
+                {isCaptain && pendingRequests.length > 0 && (
+                  <div className="mb-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">Solicitudes pendientes</h4>
+                    {pendingRequests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 mb-1 text-xs">
+                        <span className="font-medium">{req.displayName}</span>
+                        <div className="flex gap-1">
+                          <button onClick={() => handleAcceptRequest(req.id)} className="rounded bg-success/10 px-2 py-1 text-success font-medium">Aceptar</button>
+                          <button onClick={() => handleRejectRequest(req.id)} className="rounded bg-destructive/10 px-2 py-1 text-destructive font-medium">Rechazar</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {isCaptain && (
                   <div className="flex gap-2">
                     <button onClick={() => { setEditForm({ name: detailTeam.name, city: detailTeam.city, description: detailTeam.description || '' }); setIsEditing(true); }}
@@ -312,6 +339,12 @@ export default function TeamsPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                )}
+                {!isCaptain && currentUser && !isMember && (
+                  <button onClick={handleJoinRequest}
+                    className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground mt-2">
+                    Solicitar unirme
+                  </button>
                 )}
               </>
             )}
