@@ -266,7 +266,12 @@ export default function RankingsPage() {
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{player.displayName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold truncate">{player.displayName}</p>
+                      {(() => { const div = getDivision(getElo(player)); return (
+                        <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.sublevel}</span>
+                      ); })()}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <p className="text-[10px] text-muted-foreground">{player.city}</p>
                       {player.preferredPosition && (

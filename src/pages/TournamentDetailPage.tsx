@@ -667,11 +667,15 @@ export default function TournamentDetailPage() {
           {/* ELO medio del torneo */}
           {(() => {
             const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
+            const div = registeredCount >= 2 ? getDivision(avgElo) : null;
             return (
               <div className="flex items-center gap-2">
                 <Trophy className="h-4 w-4 shrink-0 text-accent" />
                 {registeredCount >= 2 ? (
-                  <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
+                  <>
+                    <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
+                    {div && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.fullName}</span>}
+                  </>
                 ) : (
                   <span className="text-muted-foreground text-xs">ELO medio: sin datos suficientes</span>
                 )}

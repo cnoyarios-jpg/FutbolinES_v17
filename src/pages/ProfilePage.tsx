@@ -1,17 +1,19 @@
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import {
   MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS,
   getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
-  getRegisteredUsers
+  getRegisteredUsers, getEloHistory, ensureEloHistory, getPlayerRivalries,
+  getActivityLog, getNotifications,
 } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity } from 'lucide-react';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
 import AchievementsSection from '@/components/AchievementsSection';
 import MvpHistorySection from '@/components/MvpHistorySection';
+import { getDivision } from '@/lib/divisions';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
 
@@ -22,6 +24,7 @@ interface ProfilePageProps {
 export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const { userId } = useParams();
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
   const [, forceUpdate] = useState(0);
 
   const isOwnProfile = !userId;
@@ -68,6 +71,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
+  const division = rating ? getDivision(rating.general) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
   const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
@@ -86,6 +90,26 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     return tPairs.some(p => p.goalkeeper.userId === targetUserId || p.forward.userId === targetUserId);
   });
 
+  // NEW: ELO history
+  ensureEloHistory(targetUserId);
+  const eloChartData = useMemo(() => {
+    const history = getEloHistory(targetUserId);
+    const now = Date.now();
+    const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
+    const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
+    return history
+      .filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff)
+      .map(e => ({
+        date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+        elo: e.elo,
+      }));
+  }, [targetUserId, eloTimeFilter]);
+
+  // NEW: Rivalries & Activity
+  const rivalries = getPlayerRivalries(targetUserId);
+  const activityLog = getActivityLog(targetUserId);
+  const unreadNotifs = isOwnProfile && currentUser ? getNotifications(currentUser.id).filter(n => !n.read).length : 0;
+
   const [editPosition, setEditPosition] = useState<Position>(currentUser?.preferredPosition || 'portero');
   const [editStyle, setEditStyle] = useState<'parado' | 'movimiento'>(currentUser?.preferredStyle || 'parado');
   const [editTable, setEditTable] = useState<TableBrand>(currentUser?.preferredTable || 'Presas');
@@ -95,6 +119,10 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     toast.success('Preferencias actualizadas');
     setShowEditDialog(false);
     forceUpdate(n => n + 1);
+  };
+
+  const activityIcons: Record<string, string> = {
+    match_win: '✅', match_loss: '❌', tournament_win: '🏆', mvp: '⭐', division_up: '📈', division_down: '📉',
   };
 
   return (
@@ -107,6 +135,21 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
+      {/* Quick links for own profile */}
+      {isOwnProfile && (
+        <div className="flex gap-2 mb-4">
+          <Link to="/mi-equipo" className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-xs font-medium text-muted-foreground">
+            <Users className="h-3.5 w-3.5" /> Mi equipo
+          </Link>
+          <Link to="/notificaciones" className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-xs font-medium text-muted-foreground relative">
+            <Bell className="h-3.5 w-3.5" /> Notificaciones
+            {unreadNotifs > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">{unreadNotifs}</span>
+            )}
+          </Link>
+        </div>
+      )}
+
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 font-display text-2xl font-bold text-primary">
@@ -115,7 +158,14 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
           <div>
             <h1 className="font-display text-xl font-bold">{displayName}</h1>
             <p className="text-sm text-muted-foreground">{city}{postalCode ? ` · CP ${postalCode}` : ''}</p>
-            {rankPosition > 0 && <p className="text-xs text-primary font-semibold">#{rankPosition} en el ranking</p>}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {rankPosition > 0 && <p className="text-xs text-primary font-semibold">#{rankPosition}</p>}
+              {division && (
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${division.bgClass} ${division.colorClass}`}>
+                  {division.emoji} {division.fullName}
+                </span>
+              )}
+            </div>
             <div className="mt-1 flex gap-1.5 flex-wrap">
               {playerType && <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${playerType === 'registrado' ? 'bg-success/10 text-success' : 'bg-warning/20 text-warning-foreground'}`}>{playerType === 'registrado' ? '✓ Registrado' : '👤 Invitado'}</span>}
               {preferredPosition && <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary capitalize">{preferredPosition}</span>}
@@ -132,6 +182,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         )}
       </div>
 
+      {/* ELO Cards */}
       {rating && (
         <div className="mt-6 grid grid-cols-3 gap-3">
           <div className="rounded-xl bg-card p-3 shadow-card text-center">
@@ -152,6 +203,38 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
+      {/* ELO Evolution Chart */}
+      {eloChartData.length >= 2 && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display text-sm font-semibold flex items-center gap-1.5">📈 Evolución ELO</h3>
+            <div className="flex gap-1">
+              {(['7d', '30d', '3m', 'all'] as const).map(f => (
+                <button key={f} onClick={() => setEloTimeFilter(f)}
+                  className={`rounded px-2 py-0.5 text-[10px] font-medium transition ${eloTimeFilter === f ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                  {f === '7d' ? '7D' : f === '30d' ? '30D' : f === '3m' ? '3M' : 'Todo'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={eloChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis domain={['dataMin - 20', 'dataMax + 20']} tick={{ fontSize: 9 }} stroke="hsl(var(--muted-foreground))" width={35} />
+                <Tooltip
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                  labelStyle={{ color: 'hsl(var(--foreground))' }}
+                />
+                <Line type="monotone" dataKey="elo" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Win/Loss Stats */}
       {rating && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <div className="grid grid-cols-4 gap-4 text-center">
@@ -163,9 +246,10 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Tiered Achievements Section */}
+      {/* Achievements */}
       <AchievementsSection userId={targetUserId} />
 
+      {/* Advanced Stats */}
       {rating && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Star className="h-4 w-4 text-accent" /> Estadísticas avanzadas</h3>
@@ -186,34 +270,66 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
               <p className="text-muted-foreground">Mejor racha</p>
               <p className="font-display text-lg font-bold">{rating.bestStreak || 0}</p>
             </div>
-            {bestPosition && (
-              <div className="rounded-lg bg-muted p-2.5">
-                <p className="text-muted-foreground">Mejor posición</p>
-                <p className="font-semibold">{bestPosition}</p>
-              </div>
-            )}
-            {bestStyle && (
-              <div className="rounded-lg bg-muted p-2.5">
-                <p className="text-muted-foreground">Mejor modo</p>
-                <p className="font-semibold">{bestStyle}</p>
-              </div>
-            )}
-            {bestTable && (
-              <div className="rounded-lg bg-muted p-2.5 col-span-2">
-                <p className="text-muted-foreground">Mejor mesa</p>
-                <p className="font-semibold">{bestTable[0]} (ELO: {bestTable[1]})</p>
-              </div>
-            )}
-            {topPartner && (
-              <div className="rounded-lg bg-muted p-2.5 col-span-2">
-                <p className="text-muted-foreground">Compañero/a más frecuente</p>
-                <p className="font-semibold">{topPartner.partnerName} ({topPartner.count} veces)</p>
-              </div>
-            )}
+            {bestPosition && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor posición</p><p className="font-semibold">{bestPosition}</p></div>}
+            {bestStyle && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor modo</p><p className="font-semibold">{bestStyle}</p></div>}
+            {bestTable && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Mejor mesa</p><p className="font-semibold">{bestTable[0]} (ELO: {bestTable[1]})</p></div>}
+            {topPartner && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Compañero/a más frecuente</p><p className="font-semibold">{topPartner.partnerName} ({topPartner.count} veces)</p></div>}
           </div>
         </div>
       )}
 
+      {/* Rivalries */}
+      {rivalries.length > 0 && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+            <Swords className="h-4 w-4 text-destructive" /> Rivalidades
+          </h3>
+          <div className="flex flex-col gap-2">
+            {rivalries.map((r, i) => (
+              <Link key={r.opponentId} to={`/perfil/${r.opponentId}`} className="flex items-center justify-between rounded-lg bg-muted p-2.5 text-xs hover:bg-muted/80 transition">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-muted-foreground">#{i + 1}</span>
+                  <span className="font-semibold">{r.opponentName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{r.encounters} enfrentamientos</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Activity */}
+      {activityLog.length > 0 && (
+        <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
+            <Activity className="h-4 w-4 text-primary" /> Actividad reciente
+          </h3>
+          <div className="flex flex-col gap-1.5">
+            {activityLog.slice(0, 10).map(a => (
+              <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span>{activityIcons[a.type] || '📌'}</span>
+                  <span className="text-muted-foreground">{a.description}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {a.eloChange != null && (
+                    <span className={`font-bold ${a.eloChange > 0 ? 'text-success' : 'text-destructive'}`}>
+                      {a.eloChange > 0 ? '+' : ''}{a.eloChange}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(a.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pair History */}
       {pairHistory.length > 0 && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5"><Handshake className="h-4 w-4 text-primary" /> Historial de parejas</h3>
@@ -240,9 +356,10 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* MVP History with context */}
+      {/* MVP History */}
       <MvpHistorySection userId={targetUserId} />
 
+      {/* Teams */}
       {teams.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
@@ -260,6 +377,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
+      {/* Edit Dialog */}
       {showEditDialog && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-xl bg-card p-6 shadow-elevated">

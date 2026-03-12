@@ -313,6 +313,21 @@ export default function TeamsPage() {
                   </div>
                 </div>
 
+                {/* Pending join requests (captain only) */}
+                {isCaptain && pendingRequests.length > 0 && (
+                  <div className="mb-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">Solicitudes pendientes</h4>
+                    {pendingRequests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between rounded-lg bg-muted p-2.5 mb-1 text-xs">
+                        <span className="font-medium">{req.displayName}</span>
+                        <div className="flex gap-1">
+                          <button onClick={() => handleAcceptRequest(req.id)} className="rounded bg-success/10 px-2 py-1 text-success font-medium">Aceptar</button>
+                          <button onClick={() => handleRejectRequest(req.id)} className="rounded bg-destructive/10 px-2 py-1 text-destructive font-medium">Rechazar</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {isCaptain && (
                   <div className="flex gap-2">
                     <button onClick={() => { setEditForm({ name: detailTeam.name, city: detailTeam.city, description: detailTeam.description || '' }); setIsEditing(true); }}
@@ -324,6 +339,12 @@ export default function TeamsPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                )}
+                {!isCaptain && currentUser && !isMember && (
+                  <button onClick={handleJoinRequest}
+                    className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground mt-2">
+                    Solicitar unirme
+                  </button>
                 )}
               </>
             )}

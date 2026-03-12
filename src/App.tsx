@@ -58,6 +58,8 @@ const App = () => {
               <Route path="/equipos/ligas" element={<TeamLeaguePage />} />
               <Route path="/equipos/:teamId" element={<TeamsPage />} />
               <Route path="/locales/:id" element={<VenueDetailPage />} />
+              <Route path="/mi-equipo" element={<MyTeamPage />} />
+              <Route path="/notificaciones" element={<NotificationsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <BottomNav />

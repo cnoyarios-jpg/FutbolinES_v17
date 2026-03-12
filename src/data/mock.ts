@@ -1625,3 +1625,199 @@ export function getTeamRanking(): (Team & { stats: TeamStats; winrate: number })
     })
     .sort((a, b) => b.stats.wins - a.stats.wins || b.winrate - a.winrate || b.elo - a.elo);
 }
+
+// ===== TEAM JOIN REQUESTS =====
+
+export interface TeamJoinRequest {
+  id: string;
+  teamId: string;
+  userId: string;
+  displayName: string;
+  status: 'pendiente' | 'aceptada' | 'rechazada';
+  createdAt: string;
+}
+
+export function getTeamJoinRequests(teamId: string): TeamJoinRequest[] {
+  try {
+    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
+    return all.filter(r => r.teamId === teamId);
+  } catch { return []; }
+}
+
+export function createJoinRequest(teamId: string, userId: string, displayName: string): { success: boolean; error?: string } {
+  try {
+    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
+    if (all.some(r => r.teamId === teamId && r.userId === userId && r.status === 'pendiente')) {
+      return { success: false, error: 'Ya tienes una solicitud pendiente' };
+    }
+    const members = getTeamMembers(teamId);
+    if (members.some(m => m.userId === userId)) {
+      return { success: false, error: 'Ya eres miembro de este equipo' };
+    }
+    all.push({
+      id: `jr_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      teamId, userId, displayName, status: 'pendiente',
+      createdAt: new Date().toISOString(),
+    });
+    localStorage.setItem('futbolines_join_requests', JSON.stringify(all));
+    const team = [...MOCK_TEAMS, ...getStoredTeams()].find(t => t.id === teamId);
+    if (team) {
+      addNotification({ userId: team.captainId, type: 'team_invite', title: 'Solicitud de equipo', body: `${displayName} quiere unirse a ${team.name}` });
+    }
+    return { success: true };
+  } catch { return { success: false, error: 'Error interno' }; }
+}
+
+export function respondJoinRequest(requestId: string, accept: boolean) {
+  try {
+    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
+    const req = all.find(r => r.id === requestId);
+    if (!req) return;
+    req.status = accept ? 'aceptada' : 'rechazada';
+    localStorage.setItem('futbolines_join_requests', JSON.stringify(all));
+    if (accept) {
+      addTeamMember({
+        id: `tm_${Date.now()}`, teamId: req.teamId, userId: req.userId,
+        displayName: req.displayName, role: 'jugador',
+        joinedAt: new Date().toISOString().split('T')[0], status: 'aceptada',
+      });
+      addNotification({ userId: req.userId, type: 'general', title: 'Solicitud aceptada', body: 'Tu solicitud para unirte al equipo ha sido aceptada' });
+    } else {
+      addNotification({ userId: req.userId, type: 'general', title: 'Solicitud rechazada', body: 'Tu solicitud ha sido rechazada' });
+    }
+  } catch {}
+}
+
+// ===== ELO HISTORY =====
+
+export interface EloHistoryEntry {
+  userId: string;
+  elo: number;
+  date: string;
+  event?: string;
+}
+
+export function getEloHistory(userId: string): EloHistoryEntry[] {
+  try {
+    const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
+    return all.filter(e => e.userId === userId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  } catch { return []; }
+}
+
+export function recordEloHistory(userId: string, elo: number, event?: string) {
+  if (isGuestPlayer(userId)) return;
+  try {
+    const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
+    all.push({ userId, elo, date: new Date().toISOString(), event });
+    localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
+  } catch {}
+}
+
+export function ensureEloHistory(userId: string) {
+  try {
+    const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
+    if (all.filter(e => e.userId === userId).length >= 5) return;
+    const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+    if (!ranking) return;
+    const currentElo = ranking.general;
+    const now = Date.now();
+    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
+    const entries: EloHistoryEntry[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = threeMonthsAgo + (now - threeMonthsAgo) * (i / 12);
+      const progress = i / 12;
+      const noise = (Math.random() - 0.5) * 30;
+      entries.push({ userId, elo: Math.max(1400, Math.round(1500 + (currentElo - 1500) * progress + noise * (1 - progress * 0.5))), date: new Date(t).toISOString() });
+    }
+    all.push(...entries);
+    localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
+  } catch {}
+}
+
+// ===== ACTIVITY LOG =====
+
+export interface ActivityEntry {
+  id: string;
+  userId: string;
+  type: 'match_win' | 'match_loss' | 'tournament_win' | 'mvp' | 'division_up' | 'division_down';
+  description: string;
+  eloChange?: number;
+  date: string;
+}
+
+export function getActivityLog(userId: string, limit: number = 20): ActivityEntry[] {
+  try {
+    const all: ActivityEntry[] = JSON.parse(localStorage.getItem('futbolines_activity_log') || '[]');
+    return all.filter(e => e.userId === userId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, limit);
+  } catch { return []; }
+}
+
+export function addActivityEntry(entry: Omit<ActivityEntry, 'id'>) {
+  if (isGuestPlayer(entry.userId)) return;
+  try {
+    const all: ActivityEntry[] = JSON.parse(localStorage.getItem('futbolines_activity_log') || '[]');
+    all.push({ ...entry, id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 5)}` });
+    localStorage.setItem('futbolines_activity_log', JSON.stringify(all));
+  } catch {}
+}
+
+// ===== RIVALRIES =====
+
+export interface Rivalry {
+  opponentId: string;
+  opponentName: string;
+  encounters: number;
+  wins: number;
+  losses: number;
+}
+
+export function getPlayerRivalries(userId: string): Rivalry[] {
+  const opponents: Record<string, { name: string; encounters: number; wins: number; losses: number }> = {};
+  MOCK_TOURNAMENTS.forEach(tournament => {
+    const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
+    const userPairs = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId);
+    userPairs.forEach(myPair => {
+      tPairs.forEach(oppPair => {
+        if (oppPair.id === myPair.id) return;
+        [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
+          if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
+          if (!opponents[opp.userId]) opponents[opp.userId] = { name: opp.displayName, encounters: 0, wins: 0, losses: 0 };
+          opponents[opp.userId].encounters++;
+        });
+      });
+    });
+  });
+  return Object.entries(opponents)
+    .map(([opponentId, data]) => ({ opponentId, opponentName: data.name, ...data }))
+    .filter(r => r.encounters >= 2)
+    .sort((a, b) => b.encounters - a.encounters)
+    .slice(0, 5);
+}
+
+// ===== USER TEAM HELPERS =====
+
+export function getUserTeam(userId: string): Team | null {
+  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
+  const captainTeam = allTeams.find(t => t.captainId === userId);
+  if (captainTeam) return captainTeam;
+  try {
+    const allMembers: TeamMember[] = JSON.parse(localStorage.getItem('futbolines_team_members') || '[]');
+    const membership = allMembers.find(m => m.userId === userId && m.status === 'aceptada');
+    if (membership) return allTeams.find(t => t.id === membership.teamId) || null;
+  } catch {}
+  return null;
+}
+
+export function getUserPendingInvites(userId: string): { id: string; teamId: string; teamName: string; displayName: string }[] {
+  try {
+    const allMembers: TeamMember[] = JSON.parse(localStorage.getItem('futbolines_team_members') || '[]');
+    const pending = allMembers.filter(m => m.userId === userId && m.status === 'pendiente');
+    const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
+    return pending.map(m => ({
+      id: m.id,
+      teamId: m.teamId,
+      teamName: allTeams.find(t => t.id === m.teamId)?.name || 'Equipo',
+      displayName: m.displayName,
+    }));
+  } catch { return []; }
+}
