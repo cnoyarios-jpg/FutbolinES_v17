@@ -755,10 +755,13 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-      // MVP ELO bonus
-      ranking.general += 15;
-      ranking.asGoalkeeper += 10;
-      ranking.asForward += 10;
+      // MVP ELO bonus - scaled by tournament level
+      const mvpBonus = getTournamentMVPBonus(tournamentId);
+      ranking.general += mvpBonus;
+      ranking.asGoalkeeper += Math.round(mvpBonus * 0.7);
+      ranking.asForward += Math.round(mvpBonus * 0.7);
+      recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name);
+      addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
       // Update tiered achievements
       updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
