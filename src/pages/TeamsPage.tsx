@@ -7,6 +7,7 @@ import {
   getTeamMembers, addTeamMember, respondTeamInvite, getTeamStats,
   searchPlayers, addNotification, getTeamMatchesForTeam, getTeamLeagues,
   getTeamLeagueStandings, getStoredTeams, fixTeamMemberConsistency,
+  getTeamJoinRequests, createJoinRequest, respondJoinRequest,
 } from '@/data/mock';
 import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
