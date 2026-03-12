@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
+import { getDivision } from '@/lib/divisions';
 import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
