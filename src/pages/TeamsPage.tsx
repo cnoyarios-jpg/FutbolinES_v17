@@ -108,6 +108,15 @@ export default function TeamsPage() {
 
   const getTeamName = (id: string) => allTeams.find(t => t.id === id)?.name || id;
 
+  const handleJoinRequest = () => {
+    if (!currentUser || !detailTeam) return;
+    const result = createJoinRequest(detailTeam.id, currentUser.id, currentUser.displayName);
+    if (result.success) { toast.success('Solicitud enviada'); forceUpdate(n => n + 1); }
+    else { toast.error(result.error || 'Error'); }
+  };
+  const handleAcceptRequest = (reqId: string) => { respondJoinRequest(reqId, true); toast.success('Solicitud aceptada'); forceUpdate(n => n + 1); };
+  const handleRejectRequest = (reqId: string) => { respondJoinRequest(reqId, false); toast.success('Solicitud rechazada'); forceUpdate(n => n + 1); };
+
   return (
     <PageShell title="Equipos">
       {/* Navigation links */}
