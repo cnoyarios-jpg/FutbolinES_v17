@@ -85,6 +85,8 @@ export default function TeamsPage() {
   const detailMembers = showDetail ? getTeamMembers(showDetail) : [];
   const detailStats = showDetail ? getTeamStats(showDetail) : null;
   const isCaptain = detailTeam && currentUser && detailTeam.captainId === currentUser.id;
+  const pendingRequests = showDetail ? getTeamJoinRequests(showDetail).filter(r => r.status === 'pendiente') : [];
+  const isMember = currentUser ? detailMembers.some(m => m.userId === currentUser.id) : false;
 
   // Enhanced profile data
   const recentMatches = showDetail ? getTeamMatchesForTeam(showDetail).filter(m => m.status === 'finalizado').slice(-5).reverse() : [];
