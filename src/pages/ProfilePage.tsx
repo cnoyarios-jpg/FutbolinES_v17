@@ -102,37 +102,15 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
     const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
     
-    let filtered: { userId: string; elo: number; date: string; position?: string }[];
-    
-    if (eloPositionFilter === 'general') {
-      // Compute general from portero + delantero history
-      const porteroH = history.filter(e => e.position === 'portero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      const delanteroH = history.filter(e => e.position === 'delantero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      const merged = [
-        ...porteroH.map(e => ({ ...e, pos: 'p' as const })),
-        ...delanteroH.map(e => ({ ...e, pos: 'd' as const })),
-      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      let lastP = porteroH.length > 0 ? porteroH[0].elo : 1500;
-      let lastD = delanteroH.length > 0 ? delanteroH[0].elo : 1500;
-      
-      const generalEntries = merged.map(e => {
-        if (e.pos === 'p') lastP = e.elo; else lastD = e.elo;
-        return { userId: e.userId, elo: Math.round((lastP + lastD) / 2), date: e.date, position: 'general' };
-      });
-      
-      filtered = generalEntries.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
-    } else {
-      const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
-      filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
-    }
+    // All positions now have their own history entries - just filter directly
+    const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
+    let filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
     
     // If no data in range, add current value
     if (filtered.length === 0 && rating) {
       const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
         : eloPositionFilter === 'delantero' ? rating.asForward 
-        : calculatedGeneral;
+        : rating.general;
       filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString(), position: eloPositionFilter }];
     }
     
@@ -146,7 +124,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
       elo: e.elo,
     }));
-  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating, calculatedGeneral]);
+  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating]);
 
   // Rivalries & Activity
   const rivalries = getPlayerRivalries(targetUserId);
