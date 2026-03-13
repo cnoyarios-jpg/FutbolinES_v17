@@ -461,10 +461,12 @@ export default function TournamentDetailPage() {
       if (isGuestPlayer(userId)) return;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
       if (ranking) {
-        if (position === 'portero') ranking.asGoalkeeper -= change;
-        else ranking.asForward -= change;
-        // Recalculate general as average
-        ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
+        const posRevert = Math.round(change * 0.45);
+        const genRevert = Math.round(change * 0.30);
+        if (position === 'portero') ranking.asGoalkeeper -= posRevert;
+        else ranking.asForward -= posRevert;
+        ranking.general -= genRevert;
+        // Mode/table adjustments are small, skip reverting for simplicity
       }
     };
 

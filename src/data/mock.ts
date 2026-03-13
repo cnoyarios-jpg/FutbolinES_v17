@@ -751,24 +751,44 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
   const { avgElo } = calculateTournamentAvgElo(tournamentId);
   const venue = MOCK_VENUES.find(v => v.id === tournament.venueId);
   
+  // Check if tournament has guests - no MVP ELO if so
+  const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const hasGuestsInTournament = mvpPairs.some(p =>
+    isGuestPlayer(p.goalkeeper.userId) || isGuestPlayer(p.forward.userId)
+  );
+
   if (!isGuestPlayer(mvpUserId)) {
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-      // MVP ELO bonus - scaled by tournament level, applied only to the played position
-      const mvpBonus = getTournamentMVPBonus(tournamentId);
-      const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
-      const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
-      const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
-      if (mvpPosition === 'portero') {
-        ranking.asGoalkeeper += mvpBonus;
-      } else {
-        ranking.asForward += mvpBonus;
+
+      if (!hasGuestsInTournament) {
+        // MVP ELO bonus - layered distribution
+        const mvpBonus = getTournamentMVPBonus(tournamentId);
+        const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
+        const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
+        
+        const posChange = Math.round(mvpBonus * 0.45);
+        const genChange = Math.round(mvpBonus * 0.30);
+        const modeChange = Math.round(mvpBonus * 0.15);
+        const tableChange = mvpBonus - posChange - genChange - modeChange;
+
+        // Layer 1: General
+        ranking.general += genChange;
+        // Layer 2: Position
+        if (mvpPosition === 'portero') ranking.asGoalkeeper += posChange;
+        else ranking.asForward += posChange;
+        // Layer 3: Mode
+        const playStyle = tournament.playStyle;
+        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
+        // Layer 4: Table
+        const tableBrand = tournament.tableBrand;
+        ranking.byTable[tableBrand] = Math.max(-90, Math.min(90, (ranking.byTable[tableBrand] || 0) + tableChange));
+
+        recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
+        recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
+        addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       }
-      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-      recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
-      recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
-      addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
       // Update tiered achievements
       updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
