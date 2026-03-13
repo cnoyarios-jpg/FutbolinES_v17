@@ -90,6 +90,7 @@ export default function TournamentDetailPage() {
   });
   const [kingHistory, setKingHistory] = useState<KingMatch[]>([]);
   const [kingWinStreak, setKingWinStreak] = useState(0);
+  const [kingRoundsCompleted, setKingRoundsCompleted] = useState(0);
 
   const [eloChanges, setEloChanges] = useState<EloChangeDisplay[]>([]);
   const [, forceUpdate] = useState(0);
