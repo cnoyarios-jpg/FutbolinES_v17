@@ -78,11 +78,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const division = rating ? getDivision(rating.general) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
-  const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => {
-    const aGen = Math.round((a.asGoalkeeper + a.asForward) / 2);
-    const bGen = Math.round((b.asGoalkeeper + b.asForward) / 2);
-    return bGen - aGen;
-  });
+  const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
   const rankPosition = sortedRankings.findIndex(r => r.userId === targetUserId) + 1;
   const partners = getFrequentPartners(targetUserId);
   const topPartner = partners.length > 0 ? partners[0] : null;
