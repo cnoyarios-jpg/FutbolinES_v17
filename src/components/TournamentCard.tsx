@@ -1,6 +1,7 @@
 import { Tournament } from '@/types';
 import { Calendar, MapPin, Users, Trophy } from 'lucide-react';
 import { getDivision } from '@/lib/divisions';
+import { DivisionIcon } from '@/components/DivisionBadge';
 import { calculateTournamentAvgElo } from '@/data/mock';
 
 interface TournamentCardProps {
@@ -62,7 +63,7 @@ export default function TournamentCard({ tournament, onClick }: TournamentCardPr
               const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
               if (registeredCount < 2) return null;
               const div = getDivision(avgElo);
-              return <span className={`flex items-center gap-1 font-semibold ${div.colorClass}`}><Trophy className="h-3 w-3" />{div.emoji} {avgElo}</span>;
+              return <span className={`flex items-center gap-1 font-semibold ${div.colorClass}`}><DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {avgElo}</span>;
             })()}
           </div>
         </div>

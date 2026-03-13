@@ -4,21 +4,21 @@ export interface DivisionInfo {
   fullName: string;
   colorClass: string;
   bgClass: string;
-  emoji: string;
+  iconName: string;
   gradient: string;
   min: number;
   max: number;
 }
 
 export const DIVISION_DEFS = [
-  { name: 'Amateur', min: 1500, max: 1699, colorClass: 'text-muted-foreground', bgClass: 'bg-muted', emoji: '🛠️', gradient: 'from-muted to-muted' },
-  { name: 'Competidor', min: 1700, max: 1899, colorClass: 'text-success', bgClass: 'bg-success/10', emoji: '⚔️', gradient: 'from-success/20 to-success/5' },
-  { name: 'Avanzado', min: 1900, max: 2099, colorClass: 'text-primary', bgClass: 'bg-primary/10', emoji: '🛡️', gradient: 'from-primary/20 to-primary/5' },
-  { name: 'Experto', min: 2100, max: 2399, colorClass: 'text-secondary', bgClass: 'bg-secondary/10', emoji: '💎', gradient: 'from-secondary/20 to-secondary/5' },
-  { name: 'Maestro', min: 2400, max: 2699, colorClass: 'text-accent-foreground', bgClass: 'bg-accent/20', emoji: '🏅', gradient: 'from-accent/30 to-accent/10' },
-  { name: 'Gran Maestro', min: 2700, max: 2999, colorClass: 'text-destructive', bgClass: 'bg-destructive/10', emoji: '🔱', gradient: 'from-destructive/20 to-destructive/5' },
-  { name: 'Leyenda', min: 3000, max: 3499, colorClass: 'text-warning-foreground', bgClass: 'bg-warning/20', emoji: '⚡', gradient: 'from-warning/30 to-warning/10' },
-  { name: 'Dios del Futbolín', min: 3500, max: 99999, colorClass: 'text-accent', bgClass: 'bg-accent/30', emoji: '👑', gradient: 'from-accent/40 to-accent/15' },
+  { name: 'Amateur', min: 1500, max: 1699, colorClass: 'text-stone-400', bgClass: 'bg-stone-500/10', iconName: 'shield', gradient: 'from-stone-400/20 to-stone-400/5' },
+  { name: 'Competidor', min: 1700, max: 1899, colorClass: 'text-blue-500', bgClass: 'bg-blue-500/10', iconName: 'swords', gradient: 'from-blue-500/20 to-blue-500/5' },
+  { name: 'Avanzado', min: 1900, max: 2099, colorClass: 'text-emerald-500', bgClass: 'bg-emerald-500/10', iconName: 'shield-check', gradient: 'from-emerald-500/20 to-emerald-500/5' },
+  { name: 'Experto', min: 2100, max: 2399, colorClass: 'text-violet-500', bgClass: 'bg-violet-500/10', iconName: 'gem', gradient: 'from-violet-500/20 to-violet-500/5' },
+  { name: 'Maestro', min: 2400, max: 2699, colorClass: 'text-rose-500', bgClass: 'bg-rose-500/10', iconName: 'medal', gradient: 'from-rose-500/20 to-rose-500/5' },
+  { name: 'Gran Maestro', min: 2700, max: 2999, colorClass: 'text-amber-500', bgClass: 'bg-amber-500/10', iconName: 'crown', gradient: 'from-amber-500/20 to-amber-500/5' },
+  { name: 'Leyenda', min: 3000, max: 3499, colorClass: 'text-fuchsia-500', bgClass: 'bg-fuchsia-500/10', iconName: 'sparkles', gradient: 'from-fuchsia-500/20 to-fuchsia-500/5' },
+  { name: 'Dios del Futbolín', min: 3500, max: 99999, colorClass: 'text-yellow-400', bgClass: 'bg-gradient-to-r from-amber-500/20 to-yellow-400/10', iconName: 'flame', gradient: 'from-amber-500/30 to-yellow-400/15' },
 ];
 
 export function getDivision(elo: number): DivisionInfo {
@@ -37,7 +37,7 @@ export function getDivision(elo: number): DivisionInfo {
     fullName: `${def.name} ${sublevel}`,
     colorClass: def.colorClass,
     bgClass: def.bgClass,
-    emoji: def.emoji,
+    iconName: def.iconName,
     gradient: def.gradient,
     min: def.min,
     max: def.max,
@@ -46,15 +46,15 @@ export function getDivision(elo: number): DivisionInfo {
 
 export function getDivisionBadge(elo: number): string {
   const div = getDivision(elo);
-  return `${div.emoji} ${div.fullName}`;
+  return div.fullName;
 }
 
-export function getAllDivisions(): { name: string; min: number; max: number; emoji: string; colorClass: string; bgClass: string }[] {
+export function getAllDivisions(): { name: string; min: number; max: number; iconName: string; colorClass: string; bgClass: string }[] {
   return DIVISION_DEFS.map(d => ({
     name: d.name,
     min: d.min,
     max: d.max === 99999 ? 3500 : d.min,
-    emoji: d.emoji,
+    iconName: d.iconName,
     colorClass: d.colorClass,
     bgClass: d.bgClass,
   }));
@@ -62,7 +62,7 @@ export function getAllDivisions(): { name: string; min: number; max: number; emo
 
 /** Get subdivision ranges for a division */
 export function getSubdivisionRanges(def: typeof DIVISION_DEFS[0]): { sublevel: string; min: number; max: number }[] {
-  const effectiveMax = def.max === 99999 ? def.min + 599 : def.max; // for display purposes
+  const effectiveMax = def.max === 99999 ? def.min + 599 : def.max;
   const range = effectiveMax - def.min + 1;
   const third = Math.floor(range / 3);
   return [

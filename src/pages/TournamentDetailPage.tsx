@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
+import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
@@ -89,6 +90,7 @@ export default function TournamentDetailPage() {
   });
   const [kingHistory, setKingHistory] = useState<KingMatch[]>([]);
   const [kingWinStreak, setKingWinStreak] = useState(0);
+  const [kingRoundsCompleted, setKingRoundsCompleted] = useState(0);
 
   const [eloChanges, setEloChanges] = useState<EloChangeDisplay[]>([]);
   const [, forceUpdate] = useState(0);
@@ -345,6 +347,16 @@ export default function TournamentDetailPage() {
     const loserPair = allPairs.find(p => p.id === loserId);
 
     if (winnerPair && loserPair) {
+      // Check if any player is a guest - no ELO impact
+      const hasGuest = [
+        winnerPair.goalkeeper.userId, winnerPair.forward.userId,
+        loserPair.goalkeeper.userId, loserPair.forward.userId
+      ].some(uid => isGuestPlayer(uid));
+      if (hasGuest) {
+        toast.info('Partido con invitado: sin impacto en ELO');
+        return;
+      }
+
       const eloResult = calculate2v2EloChanges(
         winnerPair.goalkeeper.elo,
         winnerPair.forward.elo,
@@ -572,11 +584,30 @@ export default function TournamentDetailPage() {
       setKingCurrentChallenger(kingQueue[0]);
       setKingQueue(q => q.slice(1));
     } else {
-      setKingCurrentChallenger(null);
+      // Round complete - check if more rounds are needed
+      const maxRounds = tournament.kingRounds || 1;
+      const newCompleted = kingRoundsCompleted + 1;
+      setKingRoundsCompleted(newCompleted);
+
+      if (newCompleted < maxRounds) {
+        // Start new round: queue all pairs except current king
+        const newKingId = winnerId;
+        const allPairIds = pairs.map(p => p.id);
+        const nextQueue = allPairIds.filter(pid => pid !== newKingId);
+        if (nextQueue.length > 0) {
+          setKingCurrentChallenger(nextQueue[0]);
+          setKingQueue(nextQueue.slice(1));
+        } else {
+          setKingCurrentChallenger(null);
+        }
+        toast.info(`Vuelta ${newCompleted} completada. Comienza vuelta ${newCompleted + 1} de ${maxRounds}.`);
+      } else {
+        setKingCurrentChallenger(null);
+      }
     }
 
     forceUpdate(n => n + 1);
-  }, [kingCourtPairId, kingCurrentChallenger, kingQueue, kingHistory.length, applyEloChanges]);
+  }, [kingCourtPairId, kingCurrentChallenger, kingQueue, kingHistory.length, applyEloChanges, kingRoundsCompleted, pairs, tournament]);
 
   if (!tournament) {
     return (
@@ -678,7 +709,7 @@ export default function TournamentDetailPage() {
                 {registeredCount >= 2 ? (
                   <>
                     <span className="font-semibold text-accent-foreground">ELO medio: {avgElo}</span>
-                    {div && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.fullName}</span>}
+                    {div && <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${div.bgClass} ${div.colorClass}`}><DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {div.fullName}</span>}
                   </>
                 ) : (
                   <span className="text-muted-foreground text-xs">ELO medio: sin datos suficientes</span>
@@ -825,6 +856,68 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
+      {/* === TEAM MATCHES RESULTS === */}
+      {isTeamTournament && (() => {
+        const enrolledSet = new Set(tournament.enrolledTeamIds || []);
+        const tMatches = getTeamMatches().filter(m => enrolledSet.has(m.team1Id) && enrolledSet.has(m.team2Id));
+        if (tMatches.length === 0) return null;
+        const getTeamNameById = (tid: string) => allTeams.find(t => t.id === tid)?.name || tid;
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <h3 className="font-display text-sm font-semibold mb-3">⚔️ Partidos ({tMatches.filter(m => m.status === 'finalizado').length}/{tMatches.length})</h3>
+            <div className="flex flex-col gap-2">
+              {tMatches.map(match => {
+                const isDone = match.status === 'finalizado';
+                const canSelect = !isTournamentLocked && !isDone && isOrganizer;
+                const handleTeamWin = (winTeamId: string) => {
+                  if (!canSelect) return;
+                  const all = getTeamMatches();
+                  const m = all.find(x => x.id === match.id);
+                  if (!m) return;
+                  m.winnerId = winTeamId;
+                  m.status = 'finalizado';
+                  m.pairings.forEach((p, i) => {
+                    const isT1 = winTeamId === m.team1Id;
+                    p.score1 = i < 2 ? (isT1 ? 10 : 0) : (isT1 ? 0 : 10);
+                    p.score2 = i < 2 ? (isT1 ? 0 : 10) : (isT1 ? 10 : 0);
+                    p.winnerId = i < 2 ? (isT1 ? 'team1' : 'team2') : (isT1 ? 'team2' : 'team1');
+                  });
+                  localStorage.setItem('futbolines_team_matches', JSON.stringify(all));
+                  const loserId = winTeamId === m.team1Id ? m.team2Id : m.team1Id;
+                  const ws = getTeamStats(winTeamId);
+                  updateTeamStats(winTeamId, { matchesPlayed: ws.matchesPlayed + 1, wins: ws.wins + 1 });
+                  const ls = getTeamStats(loserId);
+                  updateTeamStats(loserId, { matchesPlayed: ls.matchesPlayed + 1, losses: ls.losses + 1 });
+                  toast.success('Resultado registrado');
+                  forceUpdate(n => n + 1);
+                };
+                return (
+                  <div key={match.id} className={`rounded-lg border p-3 text-xs ${isDone ? 'border-border bg-muted/30' : 'border-border bg-card'}`}>
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${match.winnerId === match.team1Id ? 'bg-success/10 font-semibold text-success' : ''} ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => handleTeamWin(match.team1Id)}
+                    >
+                      <span>{getTeamNameById(match.team1Id)}</span>
+                      {match.winnerId === match.team1Id && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                    <div className="h-px bg-border my-0.5" />
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${match.winnerId === match.team2Id ? 'bg-success/10 font-semibold text-success' : ''} ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => handleTeamWin(match.team2Id)}
+                    >
+                      <span>{getTeamNameById(match.team2Id)}</span>
+                      {match.winnerId === match.team2Id && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* === INDIVIDUAL ENROLLMENT (equilibradas / random) === */}
       {isIndividualMode && !isTeamTournament && (
         <div className="rounded-xl bg-card p-4 shadow-card mb-4">
@@ -966,6 +1059,11 @@ export default function TournamentDetailPage() {
             <div className="flex items-center gap-2 mb-3">
               <Crown className="h-5 w-5 text-accent" />
               <h3 className="font-display text-sm font-bold">En pista</h3>
+              {(tournament.kingRounds || 1) > 1 && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  Vuelta {kingRoundsCompleted + 1}/{tournament.kingRounds}
+                </span>
+              )}
               {kingWinStreak > 0 && (
                 <span className="ml-auto rounded-full bg-accent/20 px-2.5 py-0.5 text-[10px] font-bold text-accent-foreground">
                   🔥 {kingWinStreak} victoria{kingWinStreak > 1 ? 's' : ''} consecutiva{kingWinStreak > 1 ? 's' : ''}

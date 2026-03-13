@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
 import { getDivision, DIVISION_DEFS, getSubdivisionRanges } from '@/lib/divisions';
+import { DivisionIcon } from '@/components/DivisionBadge';
 import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
@@ -224,7 +225,7 @@ export default function RankingsPage() {
                     <div key={d.name} className="rounded-lg bg-muted p-3">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{d.emoji}</span>
+                          <DivisionIcon iconName={d.iconName} className="h-5 w-5" />
                           <span className={`text-xs font-bold ${d.colorClass}`}>{d.name}</span>
                         </div>
                         <span className="text-[10px] text-muted-foreground font-mono">
@@ -317,9 +318,9 @@ export default function RankingsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-semibold truncate">{player.displayName}</p>
-                      {(() => { const div = getDivision(getElo(player)); return (
+                    {(() => { const div = getDivision(getElo(player)); return (
                         <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold border border-current/10 ${div.bgClass} ${div.colorClass}`}>
-                          <span className="text-xs">{div.emoji}</span> {div.sublevel}
+                          <DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {div.sublevel}
                         </span>
                       ); })()}
                     </div>
