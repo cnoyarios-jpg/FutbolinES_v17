@@ -64,6 +64,20 @@ export default function VenueDetailPage() {
           </div>
           {venue.lastVerified && <p className="text-xs">Última verificación: {venue.lastVerified}</p>}
         </div>
+        
+        {/* Verification reliability index */}
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-semibold text-foreground">Índice de fiabilidad:</span>
+            {(() => {
+              const count = venue.verificationCount || 0;
+              if (count >= 5) return <span className="rounded-full bg-success/10 px-2.5 py-0.5 font-bold text-success">🟢 Alta ({count} verificaciones)</span>;
+              if (count >= 2) return <span className="rounded-full bg-warning/10 px-2.5 py-0.5 font-bold text-warning-foreground">🟡 Media ({count} verificaciones)</span>;
+              return <span className="rounded-full bg-destructive/10 px-2.5 py-0.5 font-bold text-destructive">🔴 Baja ({count} verificaciones)</span>;
+            })()}
+          </div>
+        </div>
+        
         {venue.description && <p className="mt-3 text-sm border-t border-border pt-3">{venue.description}</p>}
         {venue.observations && <p className="mt-2 text-xs text-muted-foreground italic">{venue.observations}</p>}
       </div>

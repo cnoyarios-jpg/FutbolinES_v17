@@ -1236,15 +1236,24 @@ export default function TournamentDetailPage() {
 
           <p className="text-xs text-muted-foreground mb-3">
             {canFinalizeTournament
-              ? 'Selecciona MVP y cierra el torneo. Al cerrar se guardan ganador, MVP y estadísticas.'
+              ? (isKingMode 
+                  ? 'Cierra el torneo. En Rey de la mesa no hay MVP (el rey ya acumula ELO).'
+                  : 'Selecciona MVP y cierra el torneo. Al cerrar se guardan ganador, MVP y estadísticas.')
               : 'Aún no se puede finalizar: primero debe quedar definida la pareja ganadora.'}
           </p>
 
           <button
             onClick={() => {
               if (!canFinalizeTournament) return;
-              setSelectedMvpId(tournament.mvpPlayerId || uniqueTournamentPlayers[0]?.userId || '');
-              setShowFinalizeDialog(true);
+              if (isKingMode) {
+                // King mode: finalize without MVP
+                finalizeTournament(tournament.id, finalWinnerPairId);
+                forceUpdate(n => n + 1);
+                toast.success('Torneo finalizado correctamente.');
+              } else {
+                setSelectedMvpId(tournament.mvpPlayerId || uniqueTournamentPlayers[0]?.userId || '');
+                setShowFinalizeDialog(true);
+              }
             }}
             disabled={!canFinalizeTournament}
             className="w-full rounded-xl bg-accent py-3 text-center font-display font-semibold text-accent-foreground transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"

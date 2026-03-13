@@ -66,6 +66,7 @@ export default function CreateTournamentPage() {
       createdAt: new Date().toISOString().split('T')[0],
       isTeamTournament: form.isTeamTournament || undefined,
       enrolledTeamIds: form.isTeamTournament ? [] : undefined,
+      kingRounds: form.format === 'rey_mesa' ? form.kingRounds : undefined,
     };
     MOCK_TOURNAMENTS.push(newTournament);
     persistTournaments();

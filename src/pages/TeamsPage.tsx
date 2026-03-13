@@ -9,6 +9,7 @@ import {
   getTeamLeagueStandings, getStoredTeams, fixTeamMemberConsistency,
   getTeamJoinRequests, createJoinRequest, respondJoinRequest, getUserTeam,
 } from '@/data/mock';
+import { VenueSearchCombobox } from '@/components/VenueSearchCombobox';
 import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
 import { toast } from 'sonner';

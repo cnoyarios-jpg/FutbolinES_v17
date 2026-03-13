@@ -217,20 +217,34 @@ export default function RankingsPage() {
           {showDivisionInfo && (
             <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
               <h4 className="text-xs font-semibold text-foreground mb-3">Sistema de Divisiones</h4>
-              <div className="flex flex-col gap-1.5">
-                {DIVISION_DEFS.map(d => (
-                  <div key={d.name} className="flex items-center justify-between rounded-lg bg-muted p-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{d.emoji}</span>
-                      <span className={`text-xs font-bold ${d.colorClass}`}>{d.name}</span>
+              <div className="flex flex-col gap-2">
+                {DIVISION_DEFS.map(d => {
+                  const subs = getSubdivisionRanges(d);
+                  return (
+                    <div key={d.name} className="rounded-lg bg-muted p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{d.emoji}</span>
+                          <span className={`text-xs font-bold ${d.colorClass}`}>{d.name}</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {d.min} – {d.max === 99999 ? '3500+' : d.max}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5 ml-7">
+                        {subs.map(sub => (
+                          <div key={sub.sublevel} className="flex items-center justify-between text-[10px]">
+                            <span className={`font-semibold ${d.colorClass}`}>{d.name} {sub.sublevel}</span>
+                            <span className="text-muted-foreground font-mono">
+                              {sub.min} – {sub.max === 99999 ? '∞' : sub.max}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {d.min} – {d.max === 99999 ? '3500+' : d.max}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              <p className="text-[10px] text-muted-foreground mt-2">Cada división tiene subniveles: III → II → I</p>
             </div>
           )}
 

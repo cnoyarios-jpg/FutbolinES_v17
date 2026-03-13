@@ -758,12 +758,15 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-      // MVP ELO bonus - scaled by tournament level
+      // MVP ELO bonus - scaled by tournament level, applied equally to both positions
       const mvpBonus = getTournamentMVPBonus(tournamentId);
-      ranking.asGoalkeeper += Math.round(mvpBonus * 0.7);
-      ranking.asForward += Math.round(mvpBonus * 0.7);
+      const halfBonus = Math.round(mvpBonus / 2);
+      ranking.asGoalkeeper += halfBonus;
+      ranking.asForward += halfBonus;
       ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-      recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name);
+      recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
+      recordEloHistory(mvpUserId, ranking.asGoalkeeper, 'MVP: ' + tournament.name, 'portero');
+      recordEloHistory(mvpUserId, ranking.asForward, 'MVP: ' + tournament.name, 'delantero');
       addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
       // Update tiered achievements
