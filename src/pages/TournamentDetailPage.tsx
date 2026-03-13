@@ -396,7 +396,9 @@ export default function TournamentDetailPage() {
       changes.forEach(c => {
         const r = MOCK_RANKINGS.find(r => r.userId === c.userId);
         if (r && !isGuestPlayer(c.userId)) {
-          recordEloHistory(c.userId, r.general);
+          // Record position-specific and general ELO history
+          recordEloHistory(c.userId, c.position === 'portero' ? r.asGoalkeeper : r.asForward, undefined, c.position as 'portero' | 'delantero');
+          recordEloHistory(c.userId, r.general, undefined, 'general');
           addActivityEntry({ userId: c.userId, type: c.change > 0 ? 'match_win' : 'match_loss', description: (c.change > 0 ? 'Victoria' : 'Derrota') + ' en ' + (tournament?.name || 'torneo'), eloChange: c.change, date: new Date().toISOString() });
         }
       });
