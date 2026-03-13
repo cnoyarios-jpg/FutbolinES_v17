@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import AchievementsSection from '@/components/AchievementsSection';
 import MvpHistorySection from '@/components/MvpHistorySection';
 import { getDivision } from '@/lib/divisions';
+import { DivisionIcon } from '@/components/DivisionBadge';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from 'recharts';
 
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
