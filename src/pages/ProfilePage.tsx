@@ -74,9 +74,8 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
-  // Calculate general ELO as average of portero + delantero
-  const calculatedGeneral = rating ? Math.round((rating.asGoalkeeper + rating.asForward) / 2) : 0;
-  const division = rating ? getDivision(calculatedGeneral) : null;
+  // General ELO is now tracked independently (layered system)
+  const division = rating ? getDivision(rating.general) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
   const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => {
