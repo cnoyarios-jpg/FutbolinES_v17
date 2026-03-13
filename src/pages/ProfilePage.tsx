@@ -208,8 +208,8 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
             <div className="flex items-center gap-1.5 mt-0.5">
               {rankPosition > 0 && <p className="text-xs text-primary font-semibold">#{rankPosition}</p>}
               {division && (
-                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border ${division.bgClass} ${division.colorClass} border-current/20`}>
-                  <span className="text-sm">{division.emoji}</span> {division.fullName}
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border ${division.bgClass} ${division.colorClass} border-current/20`}>
+                  <DivisionIcon iconName={division.iconName} className="h-3.5 w-3.5" /> {division.fullName}
                 </span>
               )}
             </div>

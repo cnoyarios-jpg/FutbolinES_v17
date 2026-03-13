@@ -318,9 +318,9 @@ export default function RankingsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-semibold truncate">{player.displayName}</p>
-                      {(() => { const div = getDivision(getElo(player)); return (
+                    {(() => { const div = getDivision(getElo(player)); return (
                         <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold border border-current/10 ${div.bgClass} ${div.colorClass}`}>
-                          <span className="text-xs">{div.emoji}</span> {div.sublevel}
+                          <DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {div.sublevel}
                         </span>
                       ); })()}
                     </div>

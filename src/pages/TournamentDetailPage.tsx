@@ -856,6 +856,68 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
+      {/* === TEAM MATCHES RESULTS === */}
+      {isTeamTournament && (() => {
+        const enrolledSet = new Set(tournament.enrolledTeamIds || []);
+        const tMatches = getTeamMatches().filter(m => enrolledSet.has(m.team1Id) && enrolledSet.has(m.team2Id));
+        if (tMatches.length === 0) return null;
+        const getTeamNameById = (tid: string) => allTeams.find(t => t.id === tid)?.name || tid;
+        return (
+          <div className="rounded-xl bg-card p-4 shadow-card mb-4">
+            <h3 className="font-display text-sm font-semibold mb-3">⚔️ Partidos ({tMatches.filter(m => m.status === 'finalizado').length}/{tMatches.length})</h3>
+            <div className="flex flex-col gap-2">
+              {tMatches.map(match => {
+                const isDone = match.status === 'finalizado';
+                const canSelect = !isTournamentLocked && !isDone && isOrganizer;
+                const handleTeamWin = (winTeamId: string) => {
+                  if (!canSelect) return;
+                  const all = getTeamMatches();
+                  const m = all.find(x => x.id === match.id);
+                  if (!m) return;
+                  m.winnerId = winTeamId;
+                  m.status = 'finalizado';
+                  m.pairings.forEach((p, i) => {
+                    const isT1 = winTeamId === m.team1Id;
+                    p.score1 = i < 2 ? (isT1 ? 10 : 0) : (isT1 ? 0 : 10);
+                    p.score2 = i < 2 ? (isT1 ? 0 : 10) : (isT1 ? 10 : 0);
+                    p.winnerId = i < 2 ? (isT1 ? 'team1' : 'team2') : (isT1 ? 'team2' : 'team1');
+                  });
+                  localStorage.setItem('futbolines_team_matches', JSON.stringify(all));
+                  const loserId = winTeamId === m.team1Id ? m.team2Id : m.team1Id;
+                  const ws = getTeamStats(winTeamId);
+                  updateTeamStats(winTeamId, { matchesPlayed: ws.matchesPlayed + 1, wins: ws.wins + 1 });
+                  const ls = getTeamStats(loserId);
+                  updateTeamStats(loserId, { matchesPlayed: ls.matchesPlayed + 1, losses: ls.losses + 1 });
+                  toast.success('Resultado registrado');
+                  forceUpdate(n => n + 1);
+                };
+                return (
+                  <div key={match.id} className={`rounded-lg border p-3 text-xs ${isDone ? 'border-border bg-muted/30' : 'border-border bg-card'}`}>
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${match.winnerId === match.team1Id ? 'bg-success/10 font-semibold text-success' : ''} ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => handleTeamWin(match.team1Id)}
+                    >
+                      <span>{getTeamNameById(match.team1Id)}</span>
+                      {match.winnerId === match.team1Id && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                    <div className="h-px bg-border my-0.5" />
+                    <div
+                      className={`px-2 py-1.5 rounded flex items-center justify-between gap-1 ${match.winnerId === match.team2Id ? 'bg-success/10 font-semibold text-success' : ''} ${canSelect ? 'cursor-pointer hover:bg-primary/5' : ''}`}
+                      onClick={() => handleTeamWin(match.team2Id)}
+                    >
+                      <span>{getTeamNameById(match.team2Id)}</span>
+                      {match.winnerId === match.team2Id && <Check className="h-3 w-3 text-success" />}
+                      {canSelect && <span className="text-[9px] text-primary">Elegir</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* === INDIVIDUAL ENROLLMENT (equilibradas / random) === */}
       {isIndividualMode && !isTeamTournament && (
         <div className="rounded-xl bg-card p-4 shadow-card mb-4">

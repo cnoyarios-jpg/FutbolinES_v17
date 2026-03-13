@@ -1744,28 +1744,21 @@ export function ensureEloHistory(userId: string) {
     const now = Date.now();
     const startTime = Math.max(registrationDate, now - 90 * 24 * 60 * 60 * 1000);
     
-    const generalElo = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
     const entries: EloHistoryEntry[] = [];
     
-    // Generate history for each position
-    const positions: { key: 'general' | 'portero' | 'delantero'; currentElo: number }[] = [
-      { key: 'general', currentElo: generalElo },
-      { key: 'portero', currentElo: ranking.asGoalkeeper },
-      { key: 'delantero', currentElo: ranking.asForward },
-    ];
-    
-    for (const pos of positions) {
-      for (let i = 0; i <= 12; i++) {
-        const t = startTime + (now - startTime) * (i / 12);
-        const progress = i / 12;
-        const noise = (Math.random() - 0.5) * 30;
-        entries.push({
-          userId,
-          elo: Math.max(1400, Math.round(1500 + (pos.currentElo - 1500) * progress + noise * (1 - progress * 0.5))),
-          date: new Date(t).toISOString(),
-          position: pos.key,
-        });
-      }
+    // Generate portero and delantero history, then compute general as their average
+    for (let i = 0; i <= 12; i++) {
+      const t = startTime + (now - startTime) * (i / 12);
+      const progress = i / 12;
+      const noiseP = (Math.random() - 0.5) * 30;
+      const noiseD = (Math.random() - 0.5) * 30;
+      const porteroElo = Math.max(1400, Math.round(1500 + (ranking.asGoalkeeper - 1500) * progress + noiseP * (1 - progress * 0.5)));
+      const delanteroElo = Math.max(1400, Math.round(1500 + (ranking.asForward - 1500) * progress + noiseD * (1 - progress * 0.5)));
+      const generalElo = Math.round((porteroElo + delanteroElo) / 2);
+      
+      entries.push({ userId, elo: porteroElo, date: new Date(t).toISOString(), position: 'portero' });
+      entries.push({ userId, elo: delanteroElo, date: new Date(t).toISOString(), position: 'delantero' });
+      entries.push({ userId, elo: generalElo, date: new Date(t).toISOString(), position: 'general' });
     }
     
     all.push(...entries);
