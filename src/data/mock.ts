@@ -760,9 +760,9 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
       // MVP ELO bonus - scaled by tournament level
       const mvpBonus = getTournamentMVPBonus(tournamentId);
-      ranking.general += mvpBonus;
       ranking.asGoalkeeper += Math.round(mvpBonus * 0.7);
       ranking.asForward += Math.round(mvpBonus * 0.7);
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
       recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name);
       addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
