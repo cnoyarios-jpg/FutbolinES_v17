@@ -170,3 +170,14 @@ export function calculateRoundRobinStandings(
     return a.losses - b.losses;
   });
 }
+
+// ===== EFFECTIVE RATING =====
+
+export function calculateEffectiveRating(
+  positionElo: number,
+  generalElo: number,
+  modeAdjust: number,
+  tableAdjust: number
+): number {
+  return Math.round(0.6 * positionElo + 0.4 * generalElo + modeAdjust + tableAdjust);
+}

@@ -347,15 +347,18 @@ export default function TournamentDetailPage() {
     const loserPair = allPairs.find(p => p.id === loserId);
 
     if (winnerPair && loserPair) {
-      // Check if any player is a guest - no ELO impact
-      const hasGuest = [
+      const allPlayerIds = [
         winnerPair.goalkeeper.userId, winnerPair.forward.userId,
         loserPair.goalkeeper.userId, loserPair.forward.userId
-      ].some(uid => isGuestPlayer(uid));
-      if (hasGuest) {
-        toast.info('Partido con invitado: sin impacto en ELO');
+      ];
+      const guestCount = allPlayerIds.filter(uid => isGuestPlayer(uid)).length;
+
+      // Guest rules: all guests = 0%, mixed = 25%, all registered = 100%
+      if (guestCount === 4) {
+        toast.info('Todos invitados: sin impacto en ELO');
         return;
       }
+      const eloMultiplier = guestCount > 0 ? 0.25 : 1.0;
 
       const eloResult = calculate2v2EloChanges(
         winnerPair.goalkeeper.elo,
@@ -366,17 +369,33 @@ export default function TournamentDetailPage() {
 
       const changes: EloChangeDisplay['changes'] = [];
 
-      const updateRanking = (userId: string, displayName: string, change: number, position: string) => {
-        if (isGuestPlayer(userId)) return; // Don't update ranking for guests
+      const updateRanking = (userId: string, displayName: string, rawChange: number, position: string) => {
+        if (isGuestPlayer(userId)) return;
         const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-        if (ranking) {
-          const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-          if (position === 'portero') ranking.asGoalkeeper += change;
-          else ranking.asForward += change;
-          // Recalculate general as average of portero + delantero
-          ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-          changes.push({ userId, displayName, position, previousElo: prevElo, newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward, change });
-        }
+        if (!ranking) return;
+
+        const scaledChange = Math.round(rawChange * eloMultiplier);
+        const posChange = Math.round(scaledChange * 0.45);
+        const genChange = Math.round(scaledChange * 0.30);
+        const modeChange = Math.round(scaledChange * 0.15);
+        const tableChange = scaledChange - posChange - genChange - modeChange; // remainder (~10%)
+
+        const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+
+        // Layer 1: General
+        ranking.general += genChange;
+        // Layer 2: Position (only the played position)
+        if (position === 'portero') ranking.asGoalkeeper += posChange;
+        else ranking.asForward += posChange;
+        // Layer 3: Mode adjustment (clamped -180 to +180)
+        const playStyle = tournament.playStyle;
+        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
+        // Layer 4: Table adjustment (clamped -90 to +90)
+        const tableBrand = tournament.tableBrand;
+        ranking.byTable[tableBrand] = Math.max(-90, Math.min(90, (ranking.byTable[tableBrand] || 0) + tableChange));
+
+        const newPosElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+        changes.push({ userId, displayName, position, previousElo: prevElo, newElo: newPosElo, change: scaledChange });
       };
 
       updateRanking(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, eloResult.winnerGoalkeeperChange, 'portero');
@@ -408,13 +427,16 @@ export default function TournamentDetailPage() {
       changes.forEach(c => {
         const r = MOCK_RANKINGS.find(r => r.userId === c.userId);
         if (r && !isGuestPlayer(c.userId)) {
-          // Record position-specific and general ELO history
           recordEloHistory(c.userId, c.position === 'portero' ? r.asGoalkeeper : r.asForward, undefined, c.position as 'portero' | 'delantero');
           recordEloHistory(c.userId, r.general, undefined, 'general');
           addActivityEntry({ userId: c.userId, type: c.change > 0 ? 'match_win' : 'match_loss', description: (c.change > 0 ? 'Victoria' : 'Derrota') + ' en ' + (tournament?.name || 'torneo'), eloChange: c.change, date: new Date().toISOString() });
         }
       });
-      toast.success('Ganador registrado. ELO actualizado.');
+      if (guestCount > 0) {
+        toast.info('Partido con invitado: ELO reducido al 25%');
+      } else {
+        toast.success('Ganador registrado. ELO actualizado.');
+      }
     }
   }, [id]);
 
@@ -439,10 +461,12 @@ export default function TournamentDetailPage() {
       if (isGuestPlayer(userId)) return;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
       if (ranking) {
-        if (position === 'portero') ranking.asGoalkeeper -= change;
-        else ranking.asForward -= change;
-        // Recalculate general as average
-        ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
+        const posRevert = Math.round(change * 0.45);
+        const genRevert = Math.round(change * 0.30);
+        if (position === 'portero') ranking.asGoalkeeper -= posRevert;
+        else ranking.asForward -= posRevert;
+        ranking.general -= genRevert;
+        // Mode/table adjustments are small, skip reverting for simplicity
       }
     };
 

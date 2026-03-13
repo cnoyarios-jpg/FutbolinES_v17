@@ -27,6 +27,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
   const [eloPositionFilter, setEloPositionFilter] = useState<'general' | 'portero' | 'delantero'>('general');
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [, forceUpdate] = useState(0);
 
   const isOwnProfile = !userId;
@@ -73,16 +74,11 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
-  // Calculate general ELO as average of portero + delantero
-  const calculatedGeneral = rating ? Math.round((rating.asGoalkeeper + rating.asForward) / 2) : 0;
-  const division = rating ? getDivision(calculatedGeneral) : null;
+  // General ELO is now tracked independently (layered system)
+  const division = rating ? getDivision(rating.general) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
-  const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => {
-    const aGen = Math.round((a.asGoalkeeper + a.asForward) / 2);
-    const bGen = Math.round((b.asGoalkeeper + b.asForward) / 2);
-    return bGen - aGen;
-  });
+  const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
   const rankPosition = sortedRankings.findIndex(r => r.userId === targetUserId) + 1;
   const partners = getFrequentPartners(targetUserId);
   const topPartner = partners.length > 0 ? partners[0] : null;
@@ -106,37 +102,15 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
     const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
     
-    let filtered: { userId: string; elo: number; date: string; position?: string }[];
-    
-    if (eloPositionFilter === 'general') {
-      // Compute general from portero + delantero history
-      const porteroH = history.filter(e => e.position === 'portero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      const delanteroH = history.filter(e => e.position === 'delantero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      const merged = [
-        ...porteroH.map(e => ({ ...e, pos: 'p' as const })),
-        ...delanteroH.map(e => ({ ...e, pos: 'd' as const })),
-      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      let lastP = porteroH.length > 0 ? porteroH[0].elo : 1500;
-      let lastD = delanteroH.length > 0 ? delanteroH[0].elo : 1500;
-      
-      const generalEntries = merged.map(e => {
-        if (e.pos === 'p') lastP = e.elo; else lastD = e.elo;
-        return { userId: e.userId, elo: Math.round((lastP + lastD) / 2), date: e.date, position: 'general' };
-      });
-      
-      filtered = generalEntries.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
-    } else {
-      const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
-      filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
-    }
+    // All positions now have their own history entries - just filter directly
+    const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
+    let filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
     
     // If no data in range, add current value
     if (filtered.length === 0 && rating) {
       const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
         : eloPositionFilter === 'delantero' ? rating.asForward 
-        : calculatedGeneral;
+        : rating.general;
       filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString(), position: eloPositionFilter }];
     }
     
@@ -150,7 +124,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
       elo: e.elo,
     }));
-  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating, calculatedGeneral]);
+  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating]);
 
   // Rivalries & Activity
   const rivalries = getPlayerRivalries(targetUserId);
@@ -229,24 +203,87 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         )}
       </div>
 
-      {/* ELO Cards - show calculated general */}
+      {/* ELO Cards - clickable to show breakdown */}
       {rating && (
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Trophy className="h-4 w-4 mx-auto text-accent" />
-            <p className="mt-1 font-display text-lg font-bold">{calculatedGeneral}</p>
-            <p className="text-[10px] text-muted-foreground">ELO General</p>
+        <div className="mt-6">
+          <div className="grid grid-cols-3 gap-3 cursor-pointer" onClick={() => setShowBreakdown(!showBreakdown)}>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Trophy className="h-4 w-4 mx-auto text-accent" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.general}</p>
+              <p className="text-[10px] text-muted-foreground">ELO General</p>
+            </div>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Shield className="h-4 w-4 mx-auto text-primary" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.asGoalkeeper}</p>
+              <p className="text-[10px] text-muted-foreground">Portero</p>
+            </div>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Target className="h-4 w-4 mx-auto text-secondary" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.asForward}</p>
+              <p className="text-[10px] text-muted-foreground">Delantero</p>
+            </div>
           </div>
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Shield className="h-4 w-4 mx-auto text-primary" />
-            <p className="mt-1 font-display text-lg font-bold">{rating.asGoalkeeper}</p>
-            <p className="text-[10px] text-muted-foreground">Portero</p>
-          </div>
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Target className="h-4 w-4 mx-auto text-secondary" />
-            <p className="mt-1 font-display text-lg font-bold">{rating.asForward}</p>
-            <p className="text-[10px] text-muted-foreground">Delantero</p>
-          </div>
+          {!showBreakdown && <p className="text-[9px] text-muted-foreground text-center mt-1">Toca para ver desglose</p>}
+
+          {/* Rating Breakdown Panel */}
+          {showBreakdown && (
+            <div className="mt-3 rounded-xl bg-card p-4 shadow-card animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display text-sm font-semibold">⚡ Desglose de Rating</h3>
+                <button onClick={(e) => { e.stopPropagation(); setShowBreakdown(false); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="space-y-3 text-xs">
+                {/* Mode Adjustments */}
+                <div>
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Modo (±180 máx)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(rating.byStyle).map(([mode, adj]) => (
+                      <div key={mode} className="rounded-lg bg-muted p-2 flex justify-between items-center">
+                        <span className="capitalize font-medium">{mode}</span>
+                        <span className={`font-bold ${(adj as number) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {(adj as number) >= 0 ? '+' : ''}{adj}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Table Adjustments */}
+                <div>
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Mesa (±90 máx)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).map(([table, adj]) => (
+                      <div key={table} className="rounded-lg bg-muted p-2 flex justify-between items-center">
+                        <span className="font-medium">{table}</span>
+                        <span className={`font-bold ${(adj as number || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {(adj as number || 0) >= 0 ? '+' : ''}{adj}
+                        </span>
+                      </div>
+                    ))}
+                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).length === 0 && (
+                      <p className="text-muted-foreground col-span-2 italic">Sin datos de mesa</p>
+                    )}
+                  </div>
+                </div>
+                {/* Effective Rating Formula */}
+                <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">Fórmula Rating Efectivo</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <span className="font-mono">0.6 × ELO posición + 0.4 × ELO general + ajuste modo + ajuste mesa</span>
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="rounded bg-muted px-2 py-1">
+                      <span className="text-muted-foreground">Portero efectivo: </span>
+                      <span className="font-bold">{Math.round(0.6 * rating.asGoalkeeper + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
+                    </div>
+                    <div className="rounded bg-muted px-2 py-1">
+                      <span className="text-muted-foreground">Delantero efectivo: </span>
+                      <span className="font-bold">{Math.round(0.6 * rating.asForward + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

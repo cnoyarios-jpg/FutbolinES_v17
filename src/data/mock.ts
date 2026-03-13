@@ -93,16 +93,13 @@ export function ensureRankingEntry(
     MOCK_RANKINGS.push({
       userId, displayName, city: city || '', postalCode,
       general: 1500, asGoalkeeper: 1500, asForward: 1500,
-      byTable: {}, byStyle: { parado: 1500, movimiento: 1500 },
+      byTable: {}, byStyle: { parado: 0, movimiento: 0 },
       wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
       mvpCount: 0, currentStreak: 0, bestStreak: 0,
       preferredPosition, preferredStyle, preferredTable,
       playerType: 'registrado',
     });
     persistRankings();
-  } else {
-    // Recalculate general as average of portero + delantero
-    existing.general = Math.round((existing.asGoalkeeper + existing.asForward) / 2);
   }
 }
 
@@ -754,24 +751,44 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
   const { avgElo } = calculateTournamentAvgElo(tournamentId);
   const venue = MOCK_VENUES.find(v => v.id === tournament.venueId);
   
+  // Check if tournament has guests - no MVP ELO if so
+  const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const hasGuestsInTournament = mvpPairs.some(p =>
+    isGuestPlayer(p.goalkeeper.userId) || isGuestPlayer(p.forward.userId)
+  );
+
   if (!isGuestPlayer(mvpUserId)) {
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-      // MVP ELO bonus - scaled by tournament level, applied only to the played position
-      const mvpBonus = getTournamentMVPBonus(tournamentId);
-      const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
-      const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
-      const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
-      if (mvpPosition === 'portero') {
-        ranking.asGoalkeeper += mvpBonus;
-      } else {
-        ranking.asForward += mvpBonus;
+
+      if (!hasGuestsInTournament) {
+        // MVP ELO bonus - layered distribution
+        const mvpBonus = getTournamentMVPBonus(tournamentId);
+        const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
+        const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
+        
+        const posChange = Math.round(mvpBonus * 0.45);
+        const genChange = Math.round(mvpBonus * 0.30);
+        const modeChange = Math.round(mvpBonus * 0.15);
+        const tableChange = mvpBonus - posChange - genChange - modeChange;
+
+        // Layer 1: General
+        ranking.general += genChange;
+        // Layer 2: Position
+        if (mvpPosition === 'portero') ranking.asGoalkeeper += posChange;
+        else ranking.asForward += posChange;
+        // Layer 3: Mode
+        const playStyle = tournament.playStyle;
+        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
+        // Layer 4: Table
+        const tableBrand = tournament.tableBrand;
+        ranking.byTable[tableBrand] = Math.max(-90, Math.min(90, (ranking.byTable[tableBrand] || 0) + tableChange));
+
+        recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
+        recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
+        addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       }
-      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-      recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
-      recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
-      addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
       // Update tiered achievements
       updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
@@ -1133,14 +1150,14 @@ export const MOCK_PAIRS: TournamentPair[] = [
 ];
 
 export const MOCK_RANKINGS: (PlayerRating & { displayName: string; city: string; postalCode?: string; avatarUrl?: string; preferredPosition?: Position; preferredStyle?: 'parado' | 'movimiento'; preferredTable?: TableBrand; playerType?: PlayerType })[] = [
-  { userId: 'u1', displayName: 'Carlos García', city: 'Madrid', postalCode: '28001', general: 1850, asGoalkeeper: 1900, asForward: 1750, byTable: { Presas: 1880, Tsunami: 1700 }, byStyle: { parado: 1870, movimiento: 1780 }, wins: 142, losses: 58, tournamentsPlayed: 34, tournamentsWon: 8, mvpCount: 5, currentStreak: 3, bestStreak: 8, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
-  { userId: 'u2', displayName: 'Laura Martínez', city: 'Barcelona', postalCode: '08001', general: 1820, asGoalkeeper: 1780, asForward: 1860, byTable: { Tsunami: 1850, Presas: 1750 }, byStyle: { parado: 1790, movimiento: 1850 }, wins: 128, losses: 52, tournamentsPlayed: 30, tournamentsWon: 7, mvpCount: 3, currentStreak: 1, bestStreak: 6, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
-  { userId: 'u3', displayName: 'Mikel Etxebarria', city: 'Bilbao', postalCode: '48001', general: 1790, asGoalkeeper: 1830, asForward: 1720, byTable: { Presas: 1820 }, byStyle: { parado: 1810, movimiento: 1740 }, wins: 115, losses: 65, tournamentsPlayed: 28, tournamentsWon: 5, mvpCount: 2, currentStreak: 0, bestStreak: 5, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
-  { userId: 'u4', displayName: 'Ana López', city: 'Sevilla', postalCode: '41001', general: 1750, asGoalkeeper: 1700, asForward: 1800, byTable: { Val: 1780 }, byStyle: { parado: 1720, movimiento: 1780 }, wins: 98, losses: 62, tournamentsPlayed: 25, tournamentsWon: 4, mvpCount: 1, currentStreak: 2, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Val', playerType: 'registrado' },
-  { userId: 'u5', displayName: 'Pedro Sánchez', city: 'Valencia', postalCode: '46001', general: 1720, asGoalkeeper: 1740, asForward: 1680, byTable: { Garlando: 1750 }, byStyle: { parado: 1730, movimiento: 1700 }, wins: 89, losses: 71, tournamentsPlayed: 22, tournamentsWon: 3, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Garlando', playerType: 'registrado' },
-  { userId: 'u6', displayName: 'María Fernández', city: 'Madrid', postalCode: '28002', general: 1700, asGoalkeeper: 1650, asForward: 1750, byTable: { Presas: 1710, Infinity: 1690 }, byStyle: { parado: 1680, movimiento: 1720 }, wins: 82, losses: 68, tournamentsPlayed: 20, tournamentsWon: 2, mvpCount: 1, currentStreak: 1, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Presas', playerType: 'registrado' },
-  { userId: 'u7', displayName: 'Javi Ruiz', city: 'Bilbao', postalCode: '48002', general: 1680, asGoalkeeper: 1720, asForward: 1620, byTable: { Presas: 1700 }, byStyle: { parado: 1700, movimiento: 1650 }, wins: 76, losses: 74, tournamentsPlayed: 18, tournamentsWon: 2, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
-  { userId: 'u8', displayName: 'Elena Torres', city: 'Barcelona', postalCode: '08002', general: 1650, asGoalkeeper: 1600, asForward: 1700, byTable: { Tsunami: 1680 }, byStyle: { parado: 1630, movimiento: 1670 }, wins: 70, losses: 60, tournamentsPlayed: 16, tournamentsWon: 1, mvpCount: 0, currentStreak: 2, bestStreak: 3, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
+  { userId: 'u1', displayName: 'Carlos García', city: 'Madrid', postalCode: '28001', general: 1850, asGoalkeeper: 1900, asForward: 1750, byTable: { Presas: 30, Tsunami: -90 }, byStyle: { parado: 20, movimiento: -70 }, wins: 142, losses: 58, tournamentsPlayed: 34, tournamentsWon: 8, mvpCount: 5, currentStreak: 3, bestStreak: 8, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u2', displayName: 'Laura Martínez', city: 'Barcelona', postalCode: '08001', general: 1820, asGoalkeeper: 1780, asForward: 1860, byTable: { Tsunami: 30, Presas: -70 }, byStyle: { parado: -30, movimiento: 30 }, wins: 128, losses: 52, tournamentsPlayed: 30, tournamentsWon: 7, mvpCount: 3, currentStreak: 1, bestStreak: 6, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
+  { userId: 'u3', displayName: 'Mikel Etxebarria', city: 'Bilbao', postalCode: '48001', general: 1790, asGoalkeeper: 1830, asForward: 1720, byTable: { Presas: 30 }, byStyle: { parado: 20, movimiento: -50 }, wins: 115, losses: 65, tournamentsPlayed: 28, tournamentsWon: 5, mvpCount: 2, currentStreak: 0, bestStreak: 5, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u4', displayName: 'Ana López', city: 'Sevilla', postalCode: '41001', general: 1750, asGoalkeeper: 1700, asForward: 1800, byTable: { Val: 30 }, byStyle: { parado: -30, movimiento: 30 }, wins: 98, losses: 62, tournamentsPlayed: 25, tournamentsWon: 4, mvpCount: 1, currentStreak: 2, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Val', playerType: 'registrado' },
+  { userId: 'u5', displayName: 'Pedro Sánchez', city: 'Valencia', postalCode: '46001', general: 1720, asGoalkeeper: 1740, asForward: 1680, byTable: { Garlando: 30 }, byStyle: { parado: 10, movimiento: -20 }, wins: 89, losses: 71, tournamentsPlayed: 22, tournamentsWon: 3, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Garlando', playerType: 'registrado' },
+  { userId: 'u6', displayName: 'María Fernández', city: 'Madrid', postalCode: '28002', general: 1700, asGoalkeeper: 1650, asForward: 1750, byTable: { Presas: 10, Infinity: -10 }, byStyle: { parado: -20, movimiento: 20 }, wins: 82, losses: 68, tournamentsPlayed: 20, tournamentsWon: 2, mvpCount: 1, currentStreak: 1, bestStreak: 4, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u7', displayName: 'Javi Ruiz', city: 'Bilbao', postalCode: '48002', general: 1680, asGoalkeeper: 1720, asForward: 1620, byTable: { Presas: 20 }, byStyle: { parado: 20, movimiento: -30 }, wins: 76, losses: 74, tournamentsPlayed: 18, tournamentsWon: 2, mvpCount: 0, currentStreak: 0, bestStreak: 3, preferredPosition: 'portero', preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado' },
+  { userId: 'u8', displayName: 'Elena Torres', city: 'Barcelona', postalCode: '08002', general: 1650, asGoalkeeper: 1600, asForward: 1700, byTable: { Tsunami: 30 }, byStyle: { parado: -20, movimiento: 20 }, wins: 70, losses: 60, tournamentsPlayed: 16, tournamentsWon: 1, mvpCount: 0, currentStreak: 2, bestStreak: 3, preferredPosition: 'delantero', preferredStyle: 'movimiento', preferredTable: 'Tsunami', playerType: 'registrado' },
 ];
 
 // ===== PERSISTENCE LAYER =====
@@ -1273,7 +1290,7 @@ export function findOrCreateRegisteredPlayer(displayName: string, city: string =
   MOCK_RANKINGS.push({
     userId: newUserId, displayName, city,
     general: BASE_ELO, asGoalkeeper: BASE_ELO, asForward: BASE_ELO,
-    byTable: {}, byStyle: { parado: BASE_ELO, movimiento: BASE_ELO },
+    byTable: {}, byStyle: { parado: 0, movimiento: 0 },
     wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
     mvpCount: 0, currentStreak: 0, bestStreak: 0, playerType: 'registrado',
   });
