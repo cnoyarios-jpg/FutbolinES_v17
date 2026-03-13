@@ -1654,6 +1654,11 @@ export function createJoinRequest(teamId: string, userId: string, displayName: s
     if (members.some(m => m.userId === userId)) {
       return { success: false, error: 'Ya eres miembro de este equipo' };
     }
+    // Check if already in another team
+    const existingTeam = getUserTeam(userId);
+    if (existingTeam && existingTeam.id !== teamId) {
+      return { success: false, error: `Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.` };
+    }
     all.push({
       id: `jr_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       teamId, userId, displayName, status: 'pendiente',
