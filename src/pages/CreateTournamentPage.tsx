@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { VenueSearchCombobox } from '@/components/VenueSearchCombobox';
 
 const STEPS = ['Información', 'Formato', 'Estilo', 'Localización', 'Inscripción', 'Premios', 'Vista previa'];
+const KING_ROUNDS_OPTIONS = [1, 2, 3, 4, 5];
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
 const FORMATS: { key: TournamentFormat; label: string }[] = [
   { key: 'eliminacion_simple', label: 'Eliminación simple' },
