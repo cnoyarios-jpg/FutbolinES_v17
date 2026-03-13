@@ -120,16 +120,13 @@ export default function RankingsPage() {
   const sorted = [...filtered].sort((a, b) => {
     if (view === 'porteros') return b.asGoalkeeper - a.asGoalkeeper;
     if (view === 'delanteros') return b.asForward - a.asForward;
-    // General = average of portero + delantero
-    const aGen = Math.round((a.asGoalkeeper + a.asForward) / 2);
-    const bGen = Math.round((b.asGoalkeeper + b.asForward) / 2);
-    return bGen - aGen;
+    return b.general - a.general;
   });
 
   const getElo = (player: typeof sorted[0]) => {
     if (view === 'porteros') return player.asGoalkeeper;
     if (view === 'delanteros') return player.asForward;
-    return Math.round((player.asGoalkeeper + player.asForward) / 2);
+    return player.general;
   };
 
   const pairRankings = getAllPairRankings();
