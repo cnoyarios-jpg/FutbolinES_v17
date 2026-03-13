@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
 import { getDivision, DIVISION_DEFS, getSubdivisionRanges } from '@/lib/divisions';
+import { DivisionIcon } from '@/components/DivisionBadge';
 import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
