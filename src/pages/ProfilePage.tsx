@@ -106,15 +106,33 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
     const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
     
-    // Filter by position: use the position field stored in each history entry
-    const positionFiltered = history.filter(e => {
-      const entryPos = e.position || 'general';
-      return entryPos === eloPositionFilter;
-    });
+    let filtered: { userId: string; elo: number; date: string; position?: string }[];
     
-    let filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
+    if (eloPositionFilter === 'general') {
+      // Compute general from portero + delantero history
+      const porteroH = history.filter(e => e.position === 'portero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const delanteroH = history.filter(e => e.position === 'delantero').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      const merged = [
+        ...porteroH.map(e => ({ ...e, pos: 'p' as const })),
+        ...delanteroH.map(e => ({ ...e, pos: 'd' as const })),
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      let lastP = porteroH.length > 0 ? porteroH[0].elo : 1500;
+      let lastD = delanteroH.length > 0 ? delanteroH[0].elo : 1500;
+      
+      const generalEntries = merged.map(e => {
+        if (e.pos === 'p') lastP = e.elo; else lastD = e.elo;
+        return { userId: e.userId, elo: Math.round((lastP + lastD) / 2), date: e.date, position: 'general' };
+      });
+      
+      filtered = generalEntries.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
+    } else {
+      const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
+      filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
+    }
     
-    // If no data in range, add current value as single point
+    // If no data in range, add current value
     if (filtered.length === 0 && rating) {
       const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
         : eloPositionFilter === 'delantero' ? rating.asForward 
@@ -122,10 +140,10 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString(), position: eloPositionFilter }];
     }
     
-    // If only 1 point, duplicate it to show a line
-    if (filtered.length === 1 && rating) {
+    // If only 1 point, duplicate to show a line
+    if (filtered.length === 1) {
       const prev = new Date(new Date(filtered[0].date).getTime() - 24 * 60 * 60 * 1000).toISOString();
-      filtered = [{ userId: targetUserId, elo: filtered[0].elo, date: prev, position: eloPositionFilter }, ...filtered];
+      filtered = [{ ...filtered[0], date: prev }, ...filtered];
     }
     
     return filtered.map(e => ({
