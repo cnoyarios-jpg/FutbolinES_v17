@@ -347,6 +347,16 @@ export default function TournamentDetailPage() {
     const loserPair = allPairs.find(p => p.id === loserId);
 
     if (winnerPair && loserPair) {
+      // Check if any player is a guest - no ELO impact
+      const hasGuest = [
+        winnerPair.goalkeeper.userId, winnerPair.forward.userId,
+        loserPair.goalkeeper.userId, loserPair.forward.userId
+      ].some(uid => isGuestPlayer(uid));
+      if (hasGuest) {
+        toast.info('Partido con invitado: sin impacto en ELO');
+        return;
+      }
+
       const eloResult = calculate2v2EloChanges(
         winnerPair.goalkeeper.elo,
         winnerPair.forward.elo,
