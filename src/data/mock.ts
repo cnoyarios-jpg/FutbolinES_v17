@@ -1703,6 +1703,7 @@ export interface EloHistoryEntry {
   elo: number;
   date: string;
   event?: string;
+  position?: 'general' | 'portero' | 'delantero';
 }
 
 export function getEloHistory(userId: string): EloHistoryEntry[] {
