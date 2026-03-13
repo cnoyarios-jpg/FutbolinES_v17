@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
 import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
-import { getDivision } from '@/lib/divisions';
-import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus } from 'lucide-react';
+import { getDivision, DIVISION_DEFS } from '@/lib/divisions';
+import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { TableBrand } from '@/types';
 import { toast } from 'sonner';
 
@@ -16,6 +16,7 @@ export default function RankingsPage() {
   const [tab, setTab] = useState<RankingTab>('individual');
   const [view, setView] = useState<RankingView>('general');
   const [showFilters, setShowFilters] = useState(false);
+  const [showDivisionInfo, setShowDivisionInfo] = useState(false);
   const [, forceUpdate] = useState(0);
 
   // Season state
@@ -118,13 +119,16 @@ export default function RankingsPage() {
   const sorted = [...filtered].sort((a, b) => {
     if (view === 'porteros') return b.asGoalkeeper - a.asGoalkeeper;
     if (view === 'delanteros') return b.asForward - a.asForward;
-    return b.general - a.general;
+    // General = average of portero + delantero
+    const aGen = Math.round((a.asGoalkeeper + a.asForward) / 2);
+    const bGen = Math.round((b.asGoalkeeper + b.asForward) / 2);
+    return bGen - aGen;
   });
 
   const getElo = (player: typeof sorted[0]) => {
     if (view === 'porteros') return player.asGoalkeeper;
     if (view === 'delanteros') return player.asForward;
-    return player.general;
+    return Math.round((player.asGoalkeeper + player.asForward) / 2);
   };
 
   const pairRankings = getAllPairRankings();
@@ -199,6 +203,37 @@ export default function RankingsPage() {
             </button>
           </div>
 
+          {/* Division info collapsible */}
+          <button
+            onClick={() => setShowDivisionInfo(!showDivisionInfo)}
+            className="mb-3 w-full flex items-center justify-between rounded-lg bg-card p-3 shadow-card text-xs font-medium text-muted-foreground hover:bg-muted/80 transition"
+          >
+            <div className="flex items-center gap-1.5">
+              <Info className="h-3.5 w-3.5" />
+              <span>¿Qué significan las divisiones?</span>
+            </div>
+            {showDivisionInfo ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          {showDivisionInfo && (
+            <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
+              <h4 className="text-xs font-semibold text-foreground mb-3">Sistema de Divisiones</h4>
+              <div className="flex flex-col gap-1.5">
+                {DIVISION_DEFS.map(d => (
+                  <div key={d.name} className="flex items-center justify-between rounded-lg bg-muted p-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{d.emoji}</span>
+                      <span className={`text-xs font-bold ${d.colorClass}`}>{d.name}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {d.min} – {d.max === 99999 ? '3500+' : d.max}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">Cada división tiene subniveles: III → II → I</p>
+            </div>
+          )}
+
           {/* Filters panel */}
           {showFilters && (
             <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
@@ -269,7 +304,9 @@ export default function RankingsPage() {
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-semibold truncate">{player.displayName}</p>
                       {(() => { const div = getDivision(getElo(player)); return (
-                        <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${div.bgClass} ${div.colorClass}`}>{div.emoji} {div.sublevel}</span>
+                        <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold border border-current/10 ${div.bgClass} ${div.colorClass}`}>
+                          <span className="text-xs">{div.emoji}</span> {div.sublevel}
+                        </span>
                       ); })()}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">

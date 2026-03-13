@@ -100,6 +100,9 @@ export function ensureRankingEntry(
       playerType: 'registrado',
     });
     persistRankings();
+  } else {
+    // Recalculate general as average of portero + delantero
+    existing.general = Math.round((existing.asGoalkeeper + existing.asForward) / 2);
   }
 }
 
@@ -757,9 +760,9 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
       // MVP ELO bonus - scaled by tournament level
       const mvpBonus = getTournamentMVPBonus(tournamentId);
-      ranking.general += mvpBonus;
       ranking.asGoalkeeper += Math.round(mvpBonus * 0.7);
       ranking.asForward += Math.round(mvpBonus * 0.7);
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
       recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name);
       addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
@@ -1654,6 +1657,11 @@ export function createJoinRequest(teamId: string, userId: string, displayName: s
     if (members.some(m => m.userId === userId)) {
       return { success: false, error: 'Ya eres miembro de este equipo' };
     }
+    // Check if already in another team
+    const existingTeam = getUserTeam(userId);
+    if (existingTeam && existingTeam.id !== teamId) {
+      return { success: false, error: `Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.` };
+    }
     all.push({
       id: `jr_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       teamId, userId, displayName, status: 'pendiente',
@@ -1773,22 +1781,48 @@ export interface Rivalry {
 
 export function getPlayerRivalries(userId: string): Rivalry[] {
   const opponents: Record<string, { name: string; encounters: number; wins: number; losses: number }> = {};
+  
+  // Track via bracket matches - check which pairs the user was on and who they played against
   MOCK_TOURNAMENTS.forEach(tournament => {
     const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
-    const userPairs = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId);
-    userPairs.forEach(myPair => {
-      tPairs.forEach(oppPair => {
-        if (oppPair.id === myPair.id) return;
-        [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
-          if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
-          if (!opponents[opp.userId]) opponents[opp.userId] = { name: opp.displayName, encounters: 0, wins: 0, losses: 0 };
-          opponents[opp.userId].encounters++;
-        });
+    const userPairIds = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId).map(p => p.id);
+    
+    if (userPairIds.length === 0) return;
+    
+    // Count encounters: each time user's pair appears in same tournament as opponent
+    tPairs.forEach(oppPair => {
+      if (userPairIds.includes(oppPair.id)) return; // skip own pairs
+      [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
+        if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
+        if (!opponents[opp.userId]) opponents[opp.userId] = { name: opp.displayName, encounters: 0, wins: 0, losses: 0 };
+        opponents[opp.userId].encounters++;
       });
     });
   });
+
+  // Calculate wins/losses from activity log
+  // For each rival, estimate from pair history context
+  // Use the pair-level encounter data: user's pairs vs opponent's pairs
+  MOCK_TOURNAMENTS.forEach(tournament => {
+    const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
+    const userPairs = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId);
+    
+    userPairs.forEach(myPair => {
+      // If my pair is 'ganadora', I won against everyone; if 'eliminada' someone beat me
+      if (myPair.status === 'ganadora') {
+        tPairs.forEach(oppPair => {
+          if (oppPair.id === myPair.id) return;
+          [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
+            if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
+            if (opponents[opp.userId]) opponents[opp.userId].wins++;
+          });
+        });
+      }
+    });
+  });
+
   return Object.entries(opponents)
-    .map(([opponentId, data]) => ({ opponentId, opponentName: data.name, ...data }))
+    .map(([opponentId, data]) => ({ opponentId, opponentName: data.name, encounters: data.encounters, wins: data.wins, losses: Math.max(0, data.encounters - data.wins) }))
     .filter(r => r.encounters >= 2)
     .sort((a, b) => b.encounters - a.encounters)
     .slice(0, 5);

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
@@ -359,9 +359,10 @@ export default function TournamentDetailPage() {
         const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
         if (ranking) {
           const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-          ranking.general += change;
           if (position === 'portero') ranking.asGoalkeeper += change;
           else ranking.asForward += change;
+          // Recalculate general as average of portero + delantero
+          ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
           changes.push({ userId, displayName, position, previousElo: prevElo, newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward, change });
         }
       };
@@ -424,9 +425,10 @@ export default function TournamentDetailPage() {
       if (isGuestPlayer(userId)) return;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
       if (ranking) {
-        ranking.general -= change;
         if (position === 'portero') ranking.asGoalkeeper -= change;
         else ranking.asForward -= change;
+        // Recalculate general as average
+        ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
       }
     };
 
@@ -791,6 +793,32 @@ export default function TournamentDetailPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-4">No hay equipos inscritos aún.</p>
+          )}
+
+          {/* Generate team matches button */}
+          {isOrganizer && (tournament.enrolledTeamIds || []).length >= 2 && (
+            <button
+              onClick={() => {
+                const teamIds = tournament.enrolledTeamIds || [];
+                for (let i = 0; i < teamIds.length; i++) {
+                  for (let j = i + 1; j < teamIds.length; j++) {
+                    const existing = getTeamMatchesForTeam(teamIds[i]).filter(m =>
+                      (m.team1Id === teamIds[j] || m.team2Id === teamIds[j])
+                    );
+                    if (existing.length === 0) {
+                      createTeamMatch(teamIds[i], teamIds[j], 3);
+                    }
+                  }
+                }
+                const t = MOCK_TOURNAMENTS.find(t => t.id === tournament.id);
+                if (t && t.status === 'abierto') { t.status = 'en_curso'; persistTournaments(); }
+                toast.success('Enfrentamientos generados');
+                forceUpdate(n => n + 1);
+              }}
+              className="mt-3 w-full rounded-xl bg-secondary py-3 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]"
+            >
+              ⚡ Generar enfrentamientos
+            </button>
           )}
         </div>
       )}

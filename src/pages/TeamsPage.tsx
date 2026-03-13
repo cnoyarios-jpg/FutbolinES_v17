@@ -7,7 +7,7 @@ import {
   getTeamMembers, addTeamMember, respondTeamInvite, getTeamStats,
   searchPlayers, addNotification, getTeamMatchesForTeam, getTeamLeagues,
   getTeamLeagueStandings, getStoredTeams, fixTeamMemberConsistency,
-  getTeamJoinRequests, createJoinRequest, respondJoinRequest,
+  getTeamJoinRequests, createJoinRequest, respondJoinRequest, getUserTeam,
 } from '@/data/mock';
 import { MapPin, Plus, X, Users, Settings, Trash2, UserPlus, Check, Shield, Trophy, Swords } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
@@ -35,6 +35,15 @@ export default function TeamsPage() {
     if (!form.name.trim()) { toast.error('Nombre obligatorio'); return; }
     if (!form.city.trim()) { toast.error('Ciudad obligatoria'); return; }
     if (!currentUser) { toast.error('Debes iniciar sesión'); return; }
+    // Check duplicate team name
+    if (allTeams.some(t => t.name.toLowerCase() === form.name.trim().toLowerCase())) {
+      toast.error('Ya existe un equipo con ese nombre'); return;
+    }
+    // Check player already in a team
+    const existingTeam = getUserTeam(currentUser.id);
+    if (existingTeam) {
+      toast.error(`Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.`); return;
+    }
     const newTeam: Team = {
       id: `team_${Date.now()}`, name: form.name, city: form.city,
       postalCode: form.postalCode || undefined,
@@ -110,6 +119,12 @@ export default function TeamsPage() {
 
   const handleJoinRequest = () => {
     if (!currentUser || !detailTeam) return;
+    // Check if already in another team
+    const existingTeam = getUserTeam(currentUser.id);
+    if (existingTeam && existingTeam.id !== detailTeam.id) {
+      toast.error(`Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.`);
+      return;
+    }
     const result = createJoinRequest(detailTeam.id, currentUser.id, currentUser.displayName);
     if (result.success) { toast.success('Solicitud enviada'); forceUpdate(n => n + 1); }
     else { toast.error(result.error || 'Error'); }
