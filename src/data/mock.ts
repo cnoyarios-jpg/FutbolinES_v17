@@ -93,16 +93,13 @@ export function ensureRankingEntry(
     MOCK_RANKINGS.push({
       userId, displayName, city: city || '', postalCode,
       general: 1500, asGoalkeeper: 1500, asForward: 1500,
-      byTable: {}, byStyle: { parado: 1500, movimiento: 1500 },
+      byTable: {}, byStyle: { parado: 0, movimiento: 0 },
       wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
       mvpCount: 0, currentStreak: 0, bestStreak: 0,
       preferredPosition, preferredStyle, preferredTable,
       playerType: 'registrado',
     });
     persistRankings();
-  } else {
-    // Recalculate general as average of portero + delantero
-    existing.general = Math.round((existing.asGoalkeeper + existing.asForward) / 2);
   }
 }
 
