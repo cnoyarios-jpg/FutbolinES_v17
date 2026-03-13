@@ -997,6 +997,11 @@ export default function TournamentDetailPage() {
             <div className="flex items-center gap-2 mb-3">
               <Crown className="h-5 w-5 text-accent" />
               <h3 className="font-display text-sm font-bold">En pista</h3>
+              {(tournament.kingRounds || 1) > 1 && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  Vuelta {kingRoundsCompleted + 1}/{tournament.kingRounds}
+                </span>
+              )}
               {kingWinStreak > 0 && (
                 <span className="ml-auto rounded-full bg-accent/20 px-2.5 py-0.5 text-[10px] font-bold text-accent-foreground">
                   🔥 {kingWinStreak} victoria{kingWinStreak > 1 ? 's' : ''} consecutiva{kingWinStreak > 1 ? 's' : ''}
