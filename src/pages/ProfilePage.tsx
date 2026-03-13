@@ -203,24 +203,87 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         )}
       </div>
 
-      {/* ELO Cards - show calculated general */}
+      {/* ELO Cards - clickable to show breakdown */}
       {rating && (
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Trophy className="h-4 w-4 mx-auto text-accent" />
-            <p className="mt-1 font-display text-lg font-bold">{calculatedGeneral}</p>
-            <p className="text-[10px] text-muted-foreground">ELO General</p>
+        <div className="mt-6">
+          <div className="grid grid-cols-3 gap-3 cursor-pointer" onClick={() => setShowBreakdown(!showBreakdown)}>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Trophy className="h-4 w-4 mx-auto text-accent" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.general}</p>
+              <p className="text-[10px] text-muted-foreground">ELO General</p>
+            </div>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Shield className="h-4 w-4 mx-auto text-primary" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.asGoalkeeper}</p>
+              <p className="text-[10px] text-muted-foreground">Portero</p>
+            </div>
+            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
+              <Target className="h-4 w-4 mx-auto text-secondary" />
+              <p className="mt-1 font-display text-lg font-bold">{rating.asForward}</p>
+              <p className="text-[10px] text-muted-foreground">Delantero</p>
+            </div>
           </div>
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Shield className="h-4 w-4 mx-auto text-primary" />
-            <p className="mt-1 font-display text-lg font-bold">{rating.asGoalkeeper}</p>
-            <p className="text-[10px] text-muted-foreground">Portero</p>
-          </div>
-          <div className="rounded-xl bg-card p-3 shadow-card text-center">
-            <Target className="h-4 w-4 mx-auto text-secondary" />
-            <p className="mt-1 font-display text-lg font-bold">{rating.asForward}</p>
-            <p className="text-[10px] text-muted-foreground">Delantero</p>
-          </div>
+          {!showBreakdown && <p className="text-[9px] text-muted-foreground text-center mt-1">Toca para ver desglose</p>}
+
+          {/* Rating Breakdown Panel */}
+          {showBreakdown && (
+            <div className="mt-3 rounded-xl bg-card p-4 shadow-card animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display text-sm font-semibold">⚡ Desglose de Rating</h3>
+                <button onClick={(e) => { e.stopPropagation(); setShowBreakdown(false); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="space-y-3 text-xs">
+                {/* Mode Adjustments */}
+                <div>
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Modo (±180 máx)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(rating.byStyle).map(([mode, adj]) => (
+                      <div key={mode} className="rounded-lg bg-muted p-2 flex justify-between items-center">
+                        <span className="capitalize font-medium">{mode}</span>
+                        <span className={`font-bold ${(adj as number) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {(adj as number) >= 0 ? '+' : ''}{adj}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Table Adjustments */}
+                <div>
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Mesa (±90 máx)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).map(([table, adj]) => (
+                      <div key={table} className="rounded-lg bg-muted p-2 flex justify-between items-center">
+                        <span className="font-medium">{table}</span>
+                        <span className={`font-bold ${(adj as number || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {(adj as number || 0) >= 0 ? '+' : ''}{adj}
+                        </span>
+                      </div>
+                    ))}
+                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).length === 0 && (
+                      <p className="text-muted-foreground col-span-2 italic">Sin datos de mesa</p>
+                    )}
+                  </div>
+                </div>
+                {/* Effective Rating Formula */}
+                <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">Fórmula Rating Efectivo</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <span className="font-mono">0.6 × ELO posición + 0.4 × ELO general + ajuste modo + ajuste mesa</span>
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="rounded bg-muted px-2 py-1">
+                      <span className="text-muted-foreground">Portero efectivo: </span>
+                      <span className="font-bold">{Math.round(0.6 * rating.asGoalkeeper + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
+                    </div>
+                    <div className="rounded bg-muted px-2 py-1">
+                      <span className="text-muted-foreground">Delantero efectivo: </span>
+                      <span className="font-bold">{Math.round(0.6 * rating.asForward + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
