@@ -183,12 +183,11 @@ export default function TeamsPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bar asociado (opcional)</label>
-                <select className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.venueId} onChange={e => setForm(f => ({ ...f, venueId: e.target.value }))}>
-                  <option value="">Ninguno</option>
-                  {MOCK_VENUES.filter(v => v.status === 'activo').map(v => (
-                    <option key={v.id} value={v.id}>{v.name} - {v.city}</option>
-                  ))}
-                </select>
+                <VenueSearchCombobox
+                  value={form.venueId}
+                  onValueChange={(venueId) => setForm(f => ({ ...f, venueId }))}
+                  placeholder="Buscar bar..."
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descripción</label>
