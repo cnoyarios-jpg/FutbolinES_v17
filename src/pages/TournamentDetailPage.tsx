@@ -794,6 +794,32 @@ export default function TournamentDetailPage() {
           ) : (
             <p className="text-sm text-muted-foreground text-center py-4">No hay equipos inscritos aún.</p>
           )}
+
+          {/* Generate team matches button */}
+          {isOrganizer && (tournament.enrolledTeamIds || []).length >= 2 && (
+            <button
+              onClick={() => {
+                const teamIds = tournament.enrolledTeamIds || [];
+                for (let i = 0; i < teamIds.length; i++) {
+                  for (let j = i + 1; j < teamIds.length; j++) {
+                    const existing = getTeamMatchesForTeam(teamIds[i]).filter(m =>
+                      (m.team1Id === teamIds[j] || m.team2Id === teamIds[j])
+                    );
+                    if (existing.length === 0) {
+                      createTeamMatch(teamIds[i], teamIds[j], 3);
+                    }
+                  }
+                }
+                const t = MOCK_TOURNAMENTS.find(t => t.id === tournament.id);
+                if (t && t.status === 'abierto') { t.status = 'en_curso'; persistTournaments(); }
+                toast.success('Enfrentamientos generados');
+                forceUpdate(n => n + 1);
+              }}
+              className="mt-3 w-full rounded-xl bg-secondary py-3 text-center font-display font-semibold text-secondary-foreground transition active:scale-[0.98]"
+            >
+              ⚡ Generar enfrentamientos
+            </button>
+          )}
         </div>
       )}
 
