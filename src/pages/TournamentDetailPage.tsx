@@ -359,9 +359,10 @@ export default function TournamentDetailPage() {
         const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
         if (ranking) {
           const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-          ranking.general += change;
           if (position === 'portero') ranking.asGoalkeeper += change;
           else ranking.asForward += change;
+          // Recalculate general as average of portero + delantero
+          ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
           changes.push({ userId, displayName, position, previousElo: prevElo, newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward, change });
         }
       };
