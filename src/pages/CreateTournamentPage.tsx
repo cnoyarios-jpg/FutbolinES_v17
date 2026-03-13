@@ -103,6 +103,21 @@ export default function CreateTournamentPage() {
           {FORMATS.map(f => (
             <button key={f.key} onClick={() => update('format', f.key)} className={`rounded-lg border p-3 text-left text-sm font-medium transition ${form.format === f.key ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{f.label}</button>
           ))}
+          {form.format === 'rey_mesa' && (
+            <div className="mt-2 border-t border-border pt-3">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Número de vueltas</label>
+              <div className="flex gap-1.5 mt-1.5">
+                {KING_ROUNDS_OPTIONS.map(n => (
+                  <button key={n} onClick={() => update('kingRounds', n)}
+                    className={`flex-1 rounded-lg border p-2 text-center text-sm font-semibold transition ${form.kingRounds === n ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Cuántas veces pasa cada pareja por la cola.</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">⚠️ En Rey de la mesa <span className="font-semibold">no hay MVP</span>: el rey ya acumula ELO continuamente.</p>
+            </div>
+          )}
           <div className="mt-2 border-t border-border pt-3">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.isTeamTournament} onChange={e => update('isTeamTournament', e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />
