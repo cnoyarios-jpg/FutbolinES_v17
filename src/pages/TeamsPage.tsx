@@ -119,6 +119,12 @@ export default function TeamsPage() {
 
   const handleJoinRequest = () => {
     if (!currentUser || !detailTeam) return;
+    // Check if already in another team
+    const existingTeam = getUserTeam(currentUser.id);
+    if (existingTeam && existingTeam.id !== detailTeam.id) {
+      toast.error(`Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.`);
+      return;
+    }
     const result = createJoinRequest(detailTeam.id, currentUser.id, currentUser.displayName);
     if (result.success) { toast.success('Solicitud enviada'); forceUpdate(n => n + 1); }
     else { toast.error(result.error || 'Error'); }
