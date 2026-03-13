@@ -38,6 +38,7 @@ export default function CreateTournamentPage() {
     maxPairs: 16, entryFee: '', prizes: '',
     requiresApproval: false,
     isTeamTournament: false,
+    kingRounds: 1,
   });
   const update = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
 
