@@ -1728,16 +1728,39 @@ export function ensureEloHistory(userId: string) {
     if (all.filter(e => e.userId === userId).length >= 5) return;
     const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
     if (!ranking) return;
-    const currentElo = ranking.general;
+    
+    // Find registration date
+    const regUsers = getRegisteredUsers();
+    const regUser = regUsers.find(u => u.id === userId);
+    const registrationDate = regUser?.createdAt ? new Date(regUser.createdAt).getTime() : Date.now() - 90 * 24 * 60 * 60 * 1000;
+    
     const now = Date.now();
-    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
+    const startTime = Math.max(registrationDate, now - 90 * 24 * 60 * 60 * 1000);
+    
+    const generalElo = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
     const entries: EloHistoryEntry[] = [];
-    for (let i = 0; i <= 12; i++) {
-      const t = threeMonthsAgo + (now - threeMonthsAgo) * (i / 12);
-      const progress = i / 12;
-      const noise = (Math.random() - 0.5) * 30;
-      entries.push({ userId, elo: Math.max(1400, Math.round(1500 + (currentElo - 1500) * progress + noise * (1 - progress * 0.5))), date: new Date(t).toISOString() });
+    
+    // Generate history for each position
+    const positions: { key: 'general' | 'portero' | 'delantero'; currentElo: number }[] = [
+      { key: 'general', currentElo: generalElo },
+      { key: 'portero', currentElo: ranking.asGoalkeeper },
+      { key: 'delantero', currentElo: ranking.asForward },
+    ];
+    
+    for (const pos of positions) {
+      for (let i = 0; i <= 12; i++) {
+        const t = startTime + (now - startTime) * (i / 12);
+        const progress = i / 12;
+        const noise = (Math.random() - 0.5) * 30;
+        entries.push({
+          userId,
+          elo: Math.max(1400, Math.round(1500 + (pos.currentElo - 1500) * progress + noise * (1 - progress * 0.5))),
+          date: new Date(t).toISOString(),
+          position: pos.key,
+        });
+      }
     }
+    
     all.push(...entries);
     localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
   } catch {}
