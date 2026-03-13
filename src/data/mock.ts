@@ -100,6 +100,9 @@ export function ensureRankingEntry(
       playerType: 'registrado',
     });
     persistRankings();
+  } else {
+    // Recalculate general as average of portero + delantero
+    existing.general = Math.round((existing.asGoalkeeper + existing.asForward) / 2);
   }
 }
 
