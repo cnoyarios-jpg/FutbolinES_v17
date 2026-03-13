@@ -584,11 +584,30 @@ export default function TournamentDetailPage() {
       setKingCurrentChallenger(kingQueue[0]);
       setKingQueue(q => q.slice(1));
     } else {
-      setKingCurrentChallenger(null);
+      // Round complete - check if more rounds are needed
+      const maxRounds = tournament.kingRounds || 1;
+      const newCompleted = kingRoundsCompleted + 1;
+      setKingRoundsCompleted(newCompleted);
+
+      if (newCompleted < maxRounds) {
+        // Start new round: queue all pairs except current king
+        const newKingId = winnerId;
+        const allPairIds = pairs.map(p => p.id);
+        const nextQueue = allPairIds.filter(pid => pid !== newKingId);
+        if (nextQueue.length > 0) {
+          setKingCurrentChallenger(nextQueue[0]);
+          setKingQueue(nextQueue.slice(1));
+        } else {
+          setKingCurrentChallenger(null);
+        }
+        toast.info(`Vuelta ${newCompleted} completada. Comienza vuelta ${newCompleted + 1} de ${maxRounds}.`);
+      } else {
+        setKingCurrentChallenger(null);
+      }
     }
 
     forceUpdate(n => n + 1);
-  }, [kingCourtPairId, kingCurrentChallenger, kingQueue, kingHistory.length, applyEloChanges]);
+  }, [kingCourtPairId, kingCurrentChallenger, kingQueue, kingHistory.length, applyEloChanges, kingRoundsCompleted, pairs, tournament]);
 
   if (!tournament) {
     return (
