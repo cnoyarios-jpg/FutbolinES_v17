@@ -106,6 +106,7 @@ export interface Tournament {
   correctedMatches?: string[];
   isTeamTournament?: boolean;
   enrolledTeamIds?: string[];
+  kingRounds?: number;
 }
 
 // Individual enrollment for equilibradas/random modes
