@@ -35,6 +35,15 @@ export default function TeamsPage() {
     if (!form.name.trim()) { toast.error('Nombre obligatorio'); return; }
     if (!form.city.trim()) { toast.error('Ciudad obligatoria'); return; }
     if (!currentUser) { toast.error('Debes iniciar sesión'); return; }
+    // Check duplicate team name
+    if (allTeams.some(t => t.name.toLowerCase() === form.name.trim().toLowerCase())) {
+      toast.error('Ya existe un equipo con ese nombre'); return;
+    }
+    // Check player already in a team
+    const existingTeam = getUserTeam(currentUser.id);
+    if (existingTeam) {
+      toast.error(`Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.`); return;
+    }
     const newTeam: Team = {
       id: `team_${Date.now()}`, name: form.name, city: form.city,
       postalCode: form.postalCode || undefined,
