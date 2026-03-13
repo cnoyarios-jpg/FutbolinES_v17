@@ -225,7 +225,7 @@ export default function RankingsPage() {
                     <div key={d.name} className="rounded-lg bg-muted p-3">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{d.emoji}</span>
+                          <DivisionIcon iconName={d.iconName} className="h-5 w-5" />
                           <span className={`text-xs font-bold ${d.colorClass}`}>{d.name}</span>
                         </div>
                         <span className="text-[10px] text-muted-foreground font-mono">
