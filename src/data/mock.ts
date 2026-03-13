@@ -1712,11 +1712,11 @@ export function getEloHistory(userId: string): EloHistoryEntry[] {
   } catch { return []; }
 }
 
-export function recordEloHistory(userId: string, elo: number, event?: string) {
+export function recordEloHistory(userId: string, elo: number, event?: string, position?: 'general' | 'portero' | 'delantero') {
   if (isGuestPlayer(userId)) return;
   try {
     const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
-    all.push({ userId, elo, date: new Date().toISOString(), event });
+    all.push({ userId, elo, date: new Date().toISOString(), event, position: position || 'general' });
     localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
   } catch {}
 }
