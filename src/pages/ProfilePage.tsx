@@ -104,41 +104,34 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     const now = Date.now();
     const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
     const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
-    let filtered = history.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
+    
+    // Filter by position: use the position field stored in each history entry
+    const positionFiltered = history.filter(e => {
+      const entryPos = e.position || 'general';
+      return entryPos === eloPositionFilter;
+    });
+    
+    let filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
     
     // If no data in range, add current value as single point
     if (filtered.length === 0 && rating) {
       const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
         : eloPositionFilter === 'delantero' ? rating.asForward 
-        : Math.round((rating.asGoalkeeper + rating.asForward) / 2);
-      filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString() }];
+        : calculatedGeneral;
+      filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString(), position: eloPositionFilter }];
     }
     
     // If only 1 point, duplicate it to show a line
     if (filtered.length === 1 && rating) {
-      const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
-        : eloPositionFilter === 'delantero' ? rating.asForward 
-        : Math.round((rating.asGoalkeeper + rating.asForward) / 2);
       const prev = new Date(new Date(filtered[0].date).getTime() - 24 * 60 * 60 * 1000).toISOString();
-      filtered = [{ userId: targetUserId, elo: currentElo, date: prev }, ...filtered];
+      filtered = [{ userId: targetUserId, elo: filtered[0].elo, date: prev, position: eloPositionFilter }, ...filtered];
     }
     
-    return filtered.map(e => {
-      // For position-specific filter, adjust the displayed ELO
-      // Note: history stores general ELO; for portero/delantero we estimate based on ratio
-      let displayElo = e.elo;
-      if (rating && eloPositionFilter !== 'general') {
-        const currentGen = Math.round((rating.asGoalkeeper + rating.asForward) / 2);
-        const ratio = currentGen > 0 ? e.elo / currentGen : 1;
-        if (eloPositionFilter === 'portero') displayElo = Math.round(rating.asGoalkeeper * ratio);
-        else displayElo = Math.round(rating.asForward * ratio);
-      }
-      return {
-        date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-        elo: displayElo,
-      };
-    });
-  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating]);
+    return filtered.map(e => ({
+      date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+      elo: e.elo,
+    }));
+  }, [targetUserId, eloTimeFilter, eloPositionFilter, rating, calculatedGeneral]);
 
   // Rivalries & Activity
   const rivalries = getPlayerRivalries(targetUserId);
