@@ -758,15 +758,19 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
     const ranking = MOCK_RANKINGS.find(r => r.userId === mvpUserId);
     if (ranking) {
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
-      // MVP ELO bonus - scaled by tournament level, applied equally to both positions
+      // MVP ELO bonus - scaled by tournament level, applied only to the played position
       const mvpBonus = getTournamentMVPBonus(tournamentId);
-      const halfBonus = Math.round(mvpBonus / 2);
-      ranking.asGoalkeeper += halfBonus;
-      ranking.asForward += halfBonus;
+      const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+      const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
+      const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
+      if (mvpPosition === 'portero') {
+        ranking.asGoalkeeper += mvpBonus;
+      } else {
+        ranking.asForward += mvpBonus;
+      }
       ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
+      recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
       recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
-      recordEloHistory(mvpUserId, ranking.asGoalkeeper, 'MVP: ' + tournament.name, 'portero');
-      recordEloHistory(mvpUserId, ranking.asForward, 'MVP: ' + tournament.name, 'delantero');
       addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       
       // Update tiered achievements
