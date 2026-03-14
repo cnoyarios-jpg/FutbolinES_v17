@@ -33,6 +33,7 @@ const RANKINGS_OVERRIDES_KEY = 'futbolines_rankings_overrides';
 const TOURNAMENTS_OVERRIDES_KEY = 'futbolines_tournaments_overrides';
 const PAIRS_OVERRIDES_KEY = 'futbolines_pairs_overrides';
 const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
+const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 
 export function getRegisteredUsers(): RegisteredUser[] {
   try {
@@ -764,26 +765,18 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
 
       if (!hasGuestsInTournament) {
-        // MVP ELO bonus - layered distribution
+        // MVP ELO bonus - simple distribution to 3 real ELOs
         const mvpBonus = getTournamentMVPBonus(tournamentId);
         const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
         const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
         
-        const posChange = Math.round(mvpBonus * 0.45);
-        const genChange = Math.round(mvpBonus * 0.30);
-        const modeChange = Math.round(mvpBonus * 0.15);
-        const tableChange = mvpBonus - posChange - genChange - modeChange;
+        const posChange = Math.round(mvpBonus * 0.6);
+        const genChange = mvpBonus - posChange;
 
-        // Layer 1: General
+        // Only update general + position ELO
         ranking.general += genChange;
-        // Layer 2: Position
         if (mvpPosition === 'portero') ranking.asGoalkeeper += posChange;
         else ranking.asForward += posChange;
-        // Layer 3: Mode
-        const playStyle = tournament.playStyle;
-        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
-        // Layer 4: Table (relative performance by table)
-        applyTableAdjustmentDelta(ranking, mvpUserId, tournament.tableBrand, tableChange);
 
         recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
@@ -1175,186 +1168,118 @@ export function persistPairs() {
   localStorage.setItem(PAIRS_OVERRIDES_KEY, JSON.stringify(MOCK_PAIRS));
 }
 
-type TablePerformanceStats = {
-  deltaSum: number;
-  matches: number;
-  wins: number;
-  losses: number;
-};
+// ===== CONTEXT STATS (mode & table performance tracking) =====
 
-type TablePerformanceStore = Record<string, Partial<Record<TableBrand, TablePerformanceStats>>>;
-
-const TABLE_FULL_CONFIDENCE_MATCHES = 10;
-const TABLE_PERFORMANCE_WEIGHT = 3;
-const TABLE_ADJUST_SCALE = 25;
-
-function clampTableAdjust(value: number) {
-  return Math.max(-90, Math.min(90, Math.round(value)));
+export interface ContextStats {
+  byMode: Record<string, { matches: number; wins: number; losses: number }>;
+  byTable: Record<string, { matches: number; wins: number; losses: number }>;
 }
 
-function getTablePerformanceStore(): TablePerformanceStore {
+function getContextStatsStore(): Record<string, ContextStats> {
   try {
-    const parsed = JSON.parse(localStorage.getItem(TABLE_PERFORMANCE_KEY) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(CONTEXT_STATS_KEY) || '{}');
     return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  } catch { return {}; }
 }
 
-function saveTablePerformanceStore(store: TablePerformanceStore) {
-  localStorage.setItem(TABLE_PERFORMANCE_KEY, JSON.stringify(store));
+function saveContextStatsStore(store: Record<string, ContextStats>) {
+  localStorage.setItem(CONTEXT_STATS_KEY, JSON.stringify(store));
 }
 
-function ensureSeededTablePerformance(
-  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
-  store: TablePerformanceStore
-) {
-  const existing = store[ranking.userId];
-  if (existing && Object.keys(existing).length > 0) return;
-
-  const seeded: Partial<Record<TableBrand, TablePerformanceStats>> = {};
-  (Object.entries(ranking.byTable) as [TableBrand, number | undefined][]).forEach(([table, value]) => {
-    const safe = Number.isFinite(value) ? Number(value) : 0;
-    if (safe === 0) return;
-
-    // Seed with low confidence so historical values don't dominate and real results can correct quickly.
-    const matches = Math.max(2, Math.min(4, Math.round(Math.abs(safe) / 45) + 2));
-    const score = safe / TABLE_ADJUST_SCALE;
-    const deltaSum = score * matches;
-    const wins = score > 0 ? Math.ceil(matches * 0.6) : score < 0 ? Math.floor(matches * 0.4) : Math.round(matches / 2);
-    const losses = Math.max(0, matches - wins);
-
-    seeded[table] = { deltaSum, matches, wins, losses };
-  });
-
-  if (Object.keys(seeded).length > 0) {
-    store[ranking.userId] = seeded;
-  }
+export function getContextStats(userId: string): ContextStats {
+  const store = getContextStatsStore();
+  return store[userId] || { byMode: {}, byTable: {} };
 }
 
-function recomputeTableAdjustments(
-  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
-  store: TablePerformanceStore
-) {
-  const playerStats = store[ranking.userId] || {};
-  const entries = (Object.entries(playerStats) as [TableBrand, TablePerformanceStats | undefined][])
-    .filter(([, stats]) => stats && stats.matches > 0) as [TableBrand, TablePerformanceStats][];
+export function recordContextStats(userId: string, mode: string, table: string, won: boolean, options?: { revert?: boolean }) {
+  if (isGuestPlayer(userId)) return;
+  const store = getContextStatsStore();
+  if (!store[userId]) store[userId] = { byMode: {}, byTable: {} };
+  const stats = store[userId];
 
-  if (entries.length === 0) {
-    (Object.keys(ranking.byTable) as TableBrand[]).forEach((table) => {
-      ranking.byTable[table] = 0;
-    });
-    return;
-  }
-
-  const totalDelta = entries.reduce((sum, [, stats]) => sum + stats.deltaSum, 0);
-  const totalMatches = entries.reduce((sum, [, stats]) => sum + stats.matches, 0);
-  const totalWins = entries.reduce((sum, [, stats]) => sum + stats.wins, 0);
-
-  const globalDeltaPerMatch = totalMatches > 0 ? totalDelta / totalMatches : 0;
-  const globalWinRate = totalMatches > 0 ? totalWins / totalMatches : 0.5;
-
-  const tableKeys = new Set<TableBrand>([
-    ...(Object.keys(ranking.byTable) as TableBrand[]),
-    ...(entries.map(([table]) => table) as TableBrand[]),
-  ]);
-
-  tableKeys.forEach((table) => {
-    const stats = playerStats[table];
-    if (!stats || stats.matches <= 0) {
-      ranking.byTable[table] = 0;
-      return;
-    }
-
-    const tableDeltaPerMatch = stats.deltaSum / stats.matches;
-    const tableWinRate = stats.wins / stats.matches;
-
-    const deltaDiff = tableDeltaPerMatch - globalDeltaPerMatch;
-    const winRateDiff = tableWinRate - globalWinRate;
-    const confidence = Math.min(stats.matches / TABLE_FULL_CONFIDENCE_MATCHES, 1);
-
-    const relativeScore = deltaDiff + (winRateDiff * TABLE_PERFORMANCE_WEIGHT);
-    ranking.byTable[table] = clampTableAdjust(relativeScore * TABLE_ADJUST_SCALE * confidence);
-  });
-}
-
-export function applyTableAdjustmentDelta(
-  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
-  userId: string,
-  tableBrand: TableBrand,
-  delta: number,
-  options?: { revert?: boolean }
-): number {
-  const previousAdjust = ranking.byTable[tableBrand] || 0;
-  if (!Number.isFinite(delta) || delta === 0) return 0;
-
-  const store = getTablePerformanceStore();
-  ensureSeededTablePerformance(ranking, store);
-
-  if (!store[userId]) store[userId] = {};
-  if (!store[userId][tableBrand]) {
-    store[userId][tableBrand] = { deltaSum: 0, matches: 0, wins: 0, losses: 0 };
-  }
-
-  const stats = store[userId][tableBrand]!;
-
+  // Mode
+  if (!stats.byMode[mode]) stats.byMode[mode] = { matches: 0, wins: 0, losses: 0 };
   if (options?.revert) {
-    stats.deltaSum -= delta;
-    stats.matches = Math.max(0, stats.matches - 1);
-    if (delta > 0) stats.wins = Math.max(0, stats.wins - 1);
-    if (delta < 0) stats.losses = Math.max(0, stats.losses - 1);
+    stats.byMode[mode].matches = Math.max(0, stats.byMode[mode].matches - 1);
+    if (won) stats.byMode[mode].wins = Math.max(0, stats.byMode[mode].wins - 1);
+    else stats.byMode[mode].losses = Math.max(0, stats.byMode[mode].losses - 1);
   } else {
-    stats.deltaSum += delta;
-    stats.matches += 1;
-    if (delta > 0) stats.wins += 1;
-    if (delta < 0) stats.losses += 1;
+    stats.byMode[mode].matches++;
+    if (won) stats.byMode[mode].wins++;
+    else stats.byMode[mode].losses++;
   }
 
-  if (stats.matches === 0) {
-    delete store[userId][tableBrand];
+  // Table
+  if (!stats.byTable[table]) stats.byTable[table] = { matches: 0, wins: 0, losses: 0 };
+  if (options?.revert) {
+    stats.byTable[table].matches = Math.max(0, stats.byTable[table].matches - 1);
+    if (won) stats.byTable[table].wins = Math.max(0, stats.byTable[table].wins - 1);
+    else stats.byTable[table].losses = Math.max(0, stats.byTable[table].losses - 1);
+  } else {
+    stats.byTable[table].matches++;
+    if (won) stats.byTable[table].wins++;
+    else stats.byTable[table].losses++;
   }
 
-  if (Object.keys(store[userId]).length === 0) {
-    delete store[userId];
-  }
-
-  recomputeTableAdjustments(ranking, store);
-  saveTablePerformanceStore(store);
-
-  const nextAdjust = ranking.byTable[tableBrand] || 0;
-  return nextAdjust - previousAdjust;
+  saveContextStatsStore(store);
 }
 
-// Sanitize adjustment values: clamp mode to ±180, table to ±90 (relative by performance store)
+/**
+ * Contextual coefficient (0.85 – 1.15) based on whether the player is in their best/worst context.
+ * - Best mode/table: ganar da menos, perder penaliza más → coefficient > 1 for losses, < 1 for wins? 
+ * Actually per the spec:
+ *   best context: win gives less, loss penalizes more → for wins coeff < 1, for losses coeff > 1
+ *   worst context: win gives more, loss penalizes less → for wins coeff > 1, for losses coeff < 1
+ * 
+ * We compute a "familiarity" score from winrate and return a coefficient.
+ */
+export function getContextualCoefficient(userId: string, mode: string, table: string, isWin: boolean): number {
+  const stats = getContextStats(userId);
+  
+  // Calculate mode familiarity
+  const modeStats = stats.byMode[mode];
+  const allModeMatches = Object.values(stats.byMode).reduce((s, m) => s + m.matches, 0);
+  const globalModeWinRate = allModeMatches > 0 
+    ? Object.values(stats.byMode).reduce((s, m) => s + m.wins, 0) / allModeMatches 
+    : 0.5;
+  const modeWinRate = modeStats && modeStats.matches >= 3 
+    ? modeStats.wins / modeStats.matches 
+    : globalModeWinRate;
+  const modeDiff = modeStats && modeStats.matches >= 3 ? modeWinRate - globalModeWinRate : 0;
+
+  // Calculate table familiarity
+  const tableStats = stats.byTable[table];
+  const allTableMatches = Object.values(stats.byTable).reduce((s, m) => s + m.matches, 0);
+  const globalTableWinRate = allTableMatches > 0 
+    ? Object.values(stats.byTable).reduce((s, m) => s + m.wins, 0) / allTableMatches 
+    : 0.5;
+  const tableWinRate = tableStats && tableStats.matches >= 3 
+    ? tableStats.wins / tableStats.matches 
+    : globalTableWinRate;
+  const tableDiff = tableStats && tableStats.matches >= 3 ? tableWinRate - globalTableWinRate : 0;
+
+  // Combined advantage: positive = player is in a strong context
+  const advantage = (modeDiff + tableDiff) / 2; // range roughly -0.5 to +0.5
+
+  // Scale to coefficient range 0.85 – 1.15
+  // In strong context (advantage > 0): wins give less (coeff < 1), losses penalize more (coeff > 1)
+  // In weak context (advantage < 0): wins give more (coeff > 1), losses penalize less (coeff < 1)
+  const scaledAdvantage = Math.max(-0.15, Math.min(0.15, advantage * 0.5));
+  
+  if (isWin) {
+    return 1 - scaledAdvantage; // strong context → less reward
+  } else {
+    return 1 + scaledAdvantage; // strong context → more penalty
+  }
+}
+
+// Sanitize adjustment values (legacy, just clamp for backwards compat)
 function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
   if (ranking.byStyle) {
     for (const key of Object.keys(ranking.byStyle) as Array<keyof typeof ranking.byStyle>) {
       const v = ranking.byStyle[key] || 0;
       ranking.byStyle[key] = Math.max(-180, Math.min(180, v));
     }
-  }
-  if (ranking.byTable) {
-    normalizeTableAdjustments(ranking);
-  }
-}
-
-/**
- * Recompute table adjustments from stored performance (fallback: just clamp legacy values).
- */
-export function normalizeTableAdjustments(ranking: { userId?: string; byTable: Partial<Record<string, number>> }) {
-  if (ranking.userId) {
-    const typedRanking = ranking as { userId: string; byTable: Partial<Record<TableBrand, number>> };
-    const store = getTablePerformanceStore();
-    ensureSeededTablePerformance(typedRanking, store);
-    recomputeTableAdjustments(typedRanking, store);
-    saveTablePerformanceStore(store);
-    return;
-  }
-
-  const keys = Object.keys(ranking.byTable).filter((k) => ranking.byTable[k] !== undefined);
-  for (const key of keys) {
-    const value = ranking.byTable[key] || 0;
-    (ranking.byTable as any)[key] = clampTableAdjust(value);
   }
 }
 

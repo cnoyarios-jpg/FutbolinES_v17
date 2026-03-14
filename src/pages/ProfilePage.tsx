@@ -5,7 +5,7 @@ import {
   MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS,
   getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
   getRegisteredUsers, getEloHistory, ensureEloHistory, getPlayerRivalries,
-  getActivityLog, getNotifications,
+  getActivityLog, getNotifications, getContextStats,
 } from '@/data/mock';
 import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity, Sun, Moon } from 'lucide-react';
 import { Position, TableBrand } from '@/types';
@@ -86,8 +86,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const topPartner = partners.length > 0 ? partners[0] : null;
   const pairHistory = getPairHistory(targetUserId);
 
-  const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
-  const bestStyle = rating ? (rating.byStyle.parado > rating.byStyle.movimiento ? 'Parado' : rating.byStyle.movimiento > rating.byStyle.parado ? 'Movimiento' : preferredStyle ? (preferredStyle === 'parado' ? 'Parado' : 'Movimiento') : 'Parado') : null;
+  const contextStats = getContextStats(targetUserId);
   const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
 
   const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
@@ -255,91 +254,95 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
           {showBreakdown && (
             <div className="mt-3 rounded-xl bg-card p-4 shadow-card animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-display text-sm font-semibold">⚡ Desglose de Rating</h3>
+                <h3 className="font-display text-sm font-semibold">📊 Rendimiento por contexto</h3>
                 <button onClick={(e) => { e.stopPropagation(); setShowBreakdown(false); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               </div>
               <div className="space-y-3 text-xs">
-                {/* Mode Adjustments */}
+                {/* Mode stats */}
                 <div>
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Modo (±180 máx)</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(rating.byStyle).map(([mode, adj]) => (
-                      <div key={mode} className="rounded-lg bg-muted p-2 flex justify-between items-center">
-                        <span className="capitalize font-medium">{mode}</span>
-                        <span className={`font-bold ${(adj as number) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                          {(adj as number) >= 0 ? '+' : ''}{adj}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {/* Table Adjustments */}
-                <div>
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Mesa (±90 máx)</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined).length > 0 ? (
-                      Object.entries(rating.byTable)
-                        .filter(([,v]) => v !== undefined)
-                        .sort(([,a],[,b]) => (b as number || 0) - (a as number || 0))
-                        .map(([table, adj]) => (
-                          <div key={table} className="rounded-lg bg-muted p-2 flex justify-between items-center">
-                            <span className="font-medium">{table}</span>
-                            <span className={`font-bold ${(adj as number || 0) > 0 ? 'text-success' : (adj as number || 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                              {(adj as number || 0) > 0 ? '+' : ''}{adj}
-                            </span>
-                          </div>
-                        ))
-                    ) : (
-                      <p className="text-muted-foreground col-span-2 italic">Sin datos de mesa</p>
-                    )}
-                  </div>
-                  <p className="text-[9px] text-muted-foreground mt-1 italic">
-                    Valores relativos: positivo = mejor que tu media, negativo = peor que tu media en esa mesa.
-                  </p>
-                </div>
-                {/* Effective Rating Formula */}
-                <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
-                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">Fórmula Rating Efectivo</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    <span className="font-mono">0.6 × ELO posición + 0.4 × ELO general + ajuste modo + ajuste mesa</span>
-                  </p>
-                  <p className="text-[9px] text-muted-foreground mt-0.5 italic">
-                    Ajustes son modificadores pequeños (modo ±180, mesa ±90), NO ratings completos.
-                  </p>
-                  {/* Effective ratings per position × mode, showing best table too */}
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Modo de juego</p>
                   {(() => {
-                    const tableEntries = Object.entries(rating.byTable)
-                      .filter(([,v]) => v !== undefined)
-                      .sort(([,a],[,b]) => (b as number || 0) - (a as number || 0));
-
+                    const modes = Object.entries(contextStats.byMode);
+                    if (modes.length === 0) return <p className="text-muted-foreground italic">Sin datos de modo aún</p>;
+                    const sorted = modes.sort(([,a],[,b]) => {
+                      const wrA = a.matches > 0 ? a.wins / a.matches : 0;
+                      const wrB = b.matches > 0 ? b.wins / b.matches : 0;
+                      return wrB - wrA;
+                    });
+                    const bestMode = sorted[0];
+                    const worstMode = sorted.length > 1 ? sorted[sorted.length - 1] : null;
                     return (
-                      <div className="mt-2 space-y-1.5 text-[10px]">
-                        {(['portero', 'delantero'] as const).map(pos => {
-                          const posElo = pos === 'portero' ? rating.asGoalkeeper : rating.asForward;
-                          const posLabel = pos === 'portero' ? 'Portero' : 'Delantero';
-                          return (['parado', 'movimiento'] as const).map(style => {
-                            const modeAdj = Math.max(-180, Math.min(180, rating.byStyle[style] || 0));
-                            const base = Math.round(0.6 * posElo + 0.4 * rating.general);
-                            // Show with best table and worst table for contrast
-                            const bestTableAdj = tableEntries.length > 0 ? Math.max(-90, Math.min(90, tableEntries[0][1] as number || 0)) : 0;
-                            const bestTableName = tableEntries.length > 0 ? tableEntries[0][0] : '';
-                            const effective = Math.round(0.6 * posElo + 0.4 * rating.general + modeAdj + bestTableAdj);
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sorted.map(([mode, stats]) => {
+                            const wr = stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0;
                             return (
-                              <div key={`${pos}-${style}`} className="rounded bg-muted px-2 py-1.5 flex justify-between items-center">
-                                <span className="text-muted-foreground">{posLabel}/{style}{bestTableName ? `/${bestTableName}` : ''}:</span>
-                                <div className="text-right">
-                                  <span className="font-bold">{effective}</span>
-                                  <span className="text-muted-foreground ml-1 text-[9px]">
-                                    (base {base} {modeAdj >= 0 ? '+' : ''}{modeAdj} {bestTableAdj >= 0 ? '+' : ''}{bestTableAdj})
-                                  </span>
+                              <div key={mode} className="rounded-lg bg-muted p-2">
+                                <div className="flex justify-between items-center mb-0.5">
+                                  <span className="capitalize font-medium">{mode}</span>
+                                  <span className="font-bold">{wr}%</span>
                                 </div>
+                                <p className="text-[10px] text-muted-foreground">{stats.matches} partidos · {stats.wins}V / {stats.losses}D</p>
                               </div>
                             );
-                          });
-                        })}
-                      </div>
+                          })}
+                        </div>
+                        <div className="flex gap-3 mt-1.5 text-[10px]">
+                          <span className="text-success font-semibold">✓ Mejor: <span className="capitalize">{bestMode[0]}</span></span>
+                          {worstMode && worstMode[0] !== bestMode[0] && (
+                            <span className="text-destructive font-semibold">✗ Peor: <span className="capitalize">{worstMode[0]}</span></span>
+                          )}
+                        </div>
+                      </>
                     );
                   })()}
+                </div>
+
+                {/* Table stats */}
+                <div>
+                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Mesas</p>
+                  {(() => {
+                    const tables = Object.entries(contextStats.byTable);
+                    if (tables.length === 0) return <p className="text-muted-foreground italic">Sin datos de mesa aún</p>;
+                    const sorted = tables.sort(([,a],[,b]) => {
+                      const wrA = a.matches > 0 ? a.wins / a.matches : 0;
+                      const wrB = b.matches > 0 ? b.wins / b.matches : 0;
+                      return wrB - wrA;
+                    });
+                    const bestTable = sorted[0];
+                    const worstTable = sorted.length > 1 ? sorted[sorted.length - 1] : null;
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sorted.map(([table, stats]) => {
+                            const wr = stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0;
+                            return (
+                              <div key={table} className="rounded-lg bg-muted p-2">
+                                <div className="flex justify-between items-center mb-0.5">
+                                  <span className="font-medium">{table}</span>
+                                  <span className="font-bold">{wr}%</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">{stats.matches} partidos · {stats.wins}V / {stats.losses}D</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-3 mt-1.5 text-[10px]">
+                          <span className="text-success font-semibold">✓ Mejor: {bestTable[0]}</span>
+                          {worstTable && worstTable[0] !== bestTable[0] && (
+                            <span className="text-destructive font-semibold">✗ Peor: {worstTable[0]}</span>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Explanation */}
+                <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    El contexto (modo y mesa) influye con un pequeño coeficiente (0.85–1.15) en cada partido: en tu mejor contexto ganar da algo menos y perder penaliza más. Los únicos ratings reales son ELO General, Portero y Delantero.
+                  </p>
                 </div>
               </div>
             </div>
@@ -436,8 +439,19 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
               <p className="font-display text-lg font-bold">{rating.bestStreak || 0}</p>
             </div>
             {bestPosition && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor posición</p><p className="font-semibold">{bestPosition}</p></div>}
-            {bestStyle && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor modo</p><p className="font-semibold">{bestStyle}</p></div>}
-            {bestTable && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Mejor mesa</p><p className="font-semibold">{bestTable[0]} (ELO: {bestTable[1]})</p></div>}
+            {(() => {
+              const modes = Object.entries(contextStats.byMode);
+              if (modes.length === 0) return null;
+              const best = modes.sort(([,a],[,b]) => (b.matches > 0 ? b.wins/b.matches : 0) - (a.matches > 0 ? a.wins/a.matches : 0))[0];
+              return <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor modo</p><p className="font-semibold capitalize">{best[0]}</p></div>;
+            })()}
+            {(() => {
+              const tables = Object.entries(contextStats.byTable);
+              if (tables.length === 0) return null;
+              const best = tables.sort(([,a],[,b]) => (b.matches > 0 ? b.wins/b.matches : 0) - (a.matches > 0 ? a.wins/a.matches : 0))[0];
+              const wr = best[1].matches > 0 ? Math.round((best[1].wins / best[1].matches) * 100) : 0;
+              return <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Mejor mesa</p><p className="font-semibold">{best[0]} ({wr}% WR)</p></div>;
+            })()}
             {topPartner && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Compañero/a más frecuente</p><p className="font-semibold">{topPartner.partnerName} ({topPartner.count} veces)</p></div>}
           </div>
         </div>
