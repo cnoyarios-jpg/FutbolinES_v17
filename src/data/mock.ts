@@ -765,26 +765,18 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
 
       if (!hasGuestsInTournament) {
-        // MVP ELO bonus - layered distribution
+        // MVP ELO bonus - simple distribution to 3 real ELOs
         const mvpBonus = getTournamentMVPBonus(tournamentId);
         const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
         const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
         
-        const posChange = Math.round(mvpBonus * 0.45);
-        const genChange = Math.round(mvpBonus * 0.30);
-        const modeChange = Math.round(mvpBonus * 0.15);
-        const tableChange = mvpBonus - posChange - genChange - modeChange;
+        const posChange = Math.round(mvpBonus * 0.6);
+        const genChange = mvpBonus - posChange;
 
-        // Layer 1: General
+        // Only update general + position ELO
         ranking.general += genChange;
-        // Layer 2: Position
         if (mvpPosition === 'portero') ranking.asGoalkeeper += posChange;
         else ranking.asForward += posChange;
-        // Layer 3: Mode
-        const playStyle = tournament.playStyle;
-        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
-        // Layer 4: Table (relative performance by table)
-        applyTableAdjustmentDelta(ranking, mvpUserId, tournament.tableBrand, tableChange);
 
         recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
