@@ -485,6 +485,7 @@ export default function TournamentDetailPage() {
         generalChange,
         modeChange: appliedModeChange,
         tableChange: appliedTableChange,
+        tableRawDelta: requestedTableChange,
         totalAppliedChange,
         rawChange,
         multiplier: eloMultiplier,
