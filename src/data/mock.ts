@@ -782,10 +782,8 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
         // Layer 3: Mode
         const playStyle = tournament.playStyle;
         ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
-        // Layer 4: Table (accumulate then normalize for relative performance)
-        const tableBrand = tournament.tableBrand;
-        ranking.byTable[tableBrand] = (ranking.byTable[tableBrand] || 0) + tableChange;
-        normalizeTableAdjustments(ranking);
+        // Layer 4: Table (relative performance by table)
+        applyTableAdjustmentDelta(ranking, mvpUserId, tournament.tableBrand, tableChange);
 
         recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
