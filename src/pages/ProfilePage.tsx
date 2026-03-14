@@ -76,8 +76,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
-  // General ELO is now tracked independently (layered system)
-  const division = rating ? getDivision(rating.general) : null;
+  // General ELO = average of goalkeeper and forward
+  const generalElo = rating ? Math.round((rating.asGoalkeeper + rating.asForward) / 2) : 0;
+  const division = rating ? getDivision(generalElo) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
   const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
