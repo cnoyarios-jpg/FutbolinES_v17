@@ -574,6 +574,31 @@ export function getVenueMostCommonStyle(venueId: string): string | null {
   return parado >= movimiento ? 'Parado' : 'Movimiento';
 }
 
+export function getNearbyVenuesByPostalCode(userPostalCode?: string, limit: number = 3): Venue[] {
+  const activeVenues = MOCK_VENUES.filter(v => v.status === 'activo');
+  if (!userPostalCode || !/^\d{5}$/.test(userPostalCode)) return activeVenues.slice(0, limit);
+
+  const userCity = getCityFromPostalCode(userPostalCode).toLowerCase();
+  const getDistance = (venue: Venue) => {
+    if (venue.postalCode && /^\d{5}$/.test(venue.postalCode)) {
+      return estimatePostalCodeDistance(userPostalCode, venue.postalCode);
+    }
+    if (userCity && venue.city.toLowerCase() === userCity) {
+      return 25;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+
+  return [...activeVenues]
+    .sort((a, b) => {
+      const distA = getDistance(a);
+      const distB = getDistance(b);
+      if (distA === distB) return a.name.localeCompare(b.name, 'es');
+      return distA - distB;
+    })
+    .slice(0, limit);
+}
+
 // ===== VENUE RANKINGS =====
 
 export function getVenueRankings(): { venueId: string; name: string; city: string; avgElo: number; tournamentCount: number; playerCount: number }[] {
