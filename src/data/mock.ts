@@ -1400,6 +1400,7 @@ export function findOrCreateRegisteredPlayer(displayName: string, city: string =
   MOCK_RANKINGS.push({
     userId: newUserId, displayName, city,
     general: BASE_ELO, asGoalkeeper: BASE_ELO, asForward: BASE_ELO,
+    goalkeeperStill: BASE_ELO, goalkeeperMoving: BASE_ELO, forwardStill: BASE_ELO, forwardMoving: BASE_ELO,
     byTable: {}, byStyle: { parado: 0, movimiento: 0 },
     wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
     mvpCount: 0, currentStreak: 0, bestStreak: 0, playerType: 'registrado',
