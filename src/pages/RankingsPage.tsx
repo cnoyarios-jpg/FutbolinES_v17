@@ -78,9 +78,11 @@ export default function RankingsPage() {
     return mode === 'parado' ? 'ELO Delantero Parado' : 'ELO Delantero Movimiento';
   };
 
-  const getPlayerCity = (player: typeof filtered[0]) => {
+  const getPlayerLocation = (player: typeof filtered[0]) => {
+    const province = player.postalCode ? getCityFromPostalCode(player.postalCode) : '';
+    if (player.postalCode && province) return `CP ${player.postalCode} · ${province}`;
+    if (player.postalCode) return `CP ${player.postalCode}`;
     if (player.city) return player.city;
-    if (player.postalCode) return getCityFromPostalCode(player.postalCode);
     return '';
   };
 
