@@ -565,9 +565,13 @@ export default function TournamentDetailPage() {
       const currentModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
       ranking.byStyle[tournament.playStyle] = clamp(currentModeAdjust - change.modeChange, -180, 180);
 
-      const currentTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      ranking.byTable[tournament.tableBrand] = (currentTableAdjust - change.tableChange);
-      normalizeTableAdjustments(ranking);
+      applyTableAdjustmentDelta(
+        ranking,
+        change.userId,
+        tournament.tableBrand,
+        change.tableRawDelta || change.tableChange,
+        { revert: true }
+      );
 
       if (change.rawChange > 0) ranking.wins = Math.max(0, ranking.wins - 1);
       if (change.rawChange < 0) ranking.losses = Math.max(0, ranking.losses - 1);
