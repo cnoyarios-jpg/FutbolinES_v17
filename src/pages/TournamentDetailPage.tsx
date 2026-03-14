@@ -5,7 +5,7 @@ import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers,
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
-import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
+import { generateBracket, type BracketMatch, calculateEloChange, calculateEffectiveRating, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
 import { toast } from 'sonner';
 
@@ -37,13 +37,27 @@ const statusColors: Record<string, string> = {
 
 interface EloChangeDisplay {
   matchKey: string;
+  hasGuests: boolean;
   changes: {
     userId: string;
     displayName: string;
-    position: string;
+    position: 'portero' | 'delantero';
     previousElo: number;
     newElo: number;
-    change: number;
+    change: number; // cambio real aplicado en la posición
+    previousGeneral: number;
+    newGeneral: number;
+    generalChange: number;
+    modeChange: number;
+    tableChange: number;
+    totalAppliedChange: number;
+    rawChange: number;
+    multiplier: number;
+    baseGeneralElo: number;
+    basePositionElo: number;
+    modeAdjust: number;
+    tableAdjust: number;
+    effectiveElo: number;
   }[];
 }
 
