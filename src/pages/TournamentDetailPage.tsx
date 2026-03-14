@@ -44,21 +44,15 @@ interface EloChangeDisplay {
     position: 'portero' | 'delantero';
     previousElo: number;
     newElo: number;
-    change: number; // cambio real aplicado en la posición
+    change: number;
     previousGeneral: number;
     newGeneral: number;
     generalChange: number;
-    modeChange: number;
-    tableChange: number;
-    tableRawDelta: number;
     totalAppliedChange: number;
     rawChange: number;
     multiplier: number;
-    baseGeneralElo: number;
-    basePositionElo: number;
-    modeAdjust: number;
-    tableAdjust: number;
-    effectiveElo: number;
+    contextCoefficient: number;
+    won: boolean;
   }[];
 }
 
