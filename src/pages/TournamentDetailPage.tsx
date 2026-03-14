@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, recordContextStats, getContextualCoefficient } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, recordContextStats } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
@@ -48,10 +48,8 @@ interface EloChangeDisplay {
     previousGeneral: number;
     newGeneral: number;
     generalChange: number;
-    totalAppliedChange: number;
     rawChange: number;
     multiplier: number;
-    contextCoefficient: number;
     won: boolean;
   }[];
 }
@@ -409,37 +407,32 @@ export default function TournamentDetailPage() {
           previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0, totalAppliedChange: 0,
-          rawChange, multiplier: eloMultiplier, contextCoefficient: 1, won,
+          generalChange: 0,
+          rawChange, multiplier: eloMultiplier, won,
         });
         return;
       }
 
-      // Apply contextual coefficient (0.85 – 1.15)
-      const coeff = getContextualCoefficient(userId, tournament.playStyle, tournament.tableBrand, won);
-      const adjustedChange = Math.round(scaledChange * coeff);
-
-      // Simple split: 60% to position, 40% to general
-      const positionChange = Math.round(adjustedChange * 0.6);
-      const generalChange = adjustedChange - positionChange;
-
+      // Only update the position played
       const previousElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const previousGeneral = ranking.general;
 
-      ranking.general += generalChange;
-      if (position === 'portero') ranking.asGoalkeeper += positionChange;
-      else ranking.asForward += positionChange;
+      if (position === 'portero') ranking.asGoalkeeper += scaledChange;
+      else ranking.asForward += scaledChange;
+
+      // General = average of both positions
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
 
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-      const totalAppliedChange = (newElo - previousElo) + generalChange;
+      const generalChange = ranking.general - previousGeneral;
 
       changes.push({
         userId, displayName, position,
         previousElo, newElo,
         change: newElo - previousElo,
         previousGeneral, newGeneral: ranking.general,
-        generalChange, totalAppliedChange,
-        rawChange, multiplier: eloMultiplier, contextCoefficient: coeff, won,
+        generalChange,
+        rawChange, multiplier: eloMultiplier, won,
       });
 
       // Record context stats
@@ -479,14 +472,14 @@ export default function TournamentDetailPage() {
           userId: c.userId,
           type: c.rawChange >= 0 ? 'match_win' : 'match_loss',
           description: `${c.rawChange >= 0 ? 'Victoria' : 'Derrota'} en ${tournament.name}`,
-          eloChange: c.totalAppliedChange,
+          eloChange: c.change,
           date: new Date().toISOString(),
         });
       }
     });
 
     if (guestCount > 0) {
-      const allZero = changes.every(c => c.totalAppliedChange === 0);
+      const allZero = changes.every(c => c.change === 0);
       toast.info(allZero ? 'Partido con invitados: cambio real 0 en ELO' : 'Partido con invitados: ELO reducido al 25%');
     } else {
       toast.success('Ganador registrado. ELO actualizado.');
@@ -507,7 +500,8 @@ export default function TournamentDetailPage() {
 
       if (change.position === 'portero') ranking.asGoalkeeper -= change.change;
       else ranking.asForward -= change.change;
-      ranking.general -= change.generalChange;
+      // Recalculate general as average
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
 
       // Revert context stats
       recordContextStats(change.userId, tournament.playStyle, tournament.tableBrand, change.won, { revert: true });
@@ -1352,13 +1346,7 @@ export default function TournamentDetailPage() {
                           {c.multiplier < 1 && (
                             <span>×{c.multiplier} (invitados)</span>
                           )}
-                          {c.contextCoefficient !== 1 && (
-                            <span>×{c.contextCoefficient.toFixed(2)} (contexto)</span>
-                          )}
-                          <span>Aplicado total: <span className="font-semibold text-foreground">{c.totalAppliedChange >= 0 ? `+${c.totalAppliedChange}` : c.totalAppliedChange}</span></span>
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                          <span>Pos: {c.change >= 0 ? `+${c.change}` : c.change}</span>
+                          <span>Pos: <span className="font-semibold text-foreground">{c.change >= 0 ? `+${c.change}` : c.change}</span></span>
                           <span>Gen: {c.generalChange >= 0 ? `+${c.generalChange}` : c.generalChange} ({c.previousGeneral}→{c.newGeneral})</span>
                         </div>
                       </div>

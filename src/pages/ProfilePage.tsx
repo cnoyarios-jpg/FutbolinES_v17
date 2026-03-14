@@ -29,7 +29,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
   const [eloPositionFilter, setEloPositionFilter] = useState<'general' | 'portero' | 'delantero'>('general');
-  const [showBreakdown, setShowBreakdown] = useState(false);
   const [, forceUpdate] = useState(0);
 
   const isOwnProfile = !userId;
@@ -76,8 +75,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
-  // General ELO is now tracked independently (layered system)
-  const division = rating ? getDivision(rating.general) : null;
+  // General ELO = average of goalkeeper and forward
+  const generalElo = rating ? Math.round((rating.asGoalkeeper + rating.asForward) / 2) : 0;
+  const division = rating ? getDivision(generalElo) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
   const sortedRankings = [...MOCK_RANKINGS].sort((a, b) => b.general - a.general);
@@ -134,7 +134,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
           ? rating.asGoalkeeper
           : eloPositionFilter === 'delantero'
             ? rating.asForward
-            : rating.general;
+            : generalElo;
 
       return [{
         date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
@@ -231,122 +231,24 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       {/* ELO Cards - clickable to show breakdown */}
       {rating && (
         <div className="mt-6">
-          <div className="grid grid-cols-3 gap-3 cursor-pointer" onClick={() => setShowBreakdown(!showBreakdown)}>
-            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
-              <Trophy className="h-4 w-4 mx-auto text-accent" />
-              <p className="mt-1 font-display text-lg font-bold">{rating.general}</p>
-              <p className="text-[10px] text-muted-foreground">ELO General</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-gradient-to-br from-accent/20 to-accent/5 p-4 text-center border border-accent/10">
+              <Trophy className="h-5 w-5 mx-auto text-accent" />
+              <p className="mt-1.5 font-display text-2xl font-bold">{generalElo}</p>
+              <p className="text-[10px] text-muted-foreground font-medium">ELO General</p>
+              <p className="text-[8px] text-muted-foreground mt-0.5">= media P + D</p>
             </div>
-            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
-              <Shield className="h-4 w-4 mx-auto text-primary" />
-              <p className="mt-1 font-display text-lg font-bold">{rating.asGoalkeeper}</p>
-              <p className="text-[10px] text-muted-foreground">Portero</p>
+            <div className="rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-4 text-center border border-primary/10">
+              <Shield className="h-5 w-5 mx-auto text-primary" />
+              <p className="mt-1.5 font-display text-2xl font-bold">{rating.asGoalkeeper}</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Portero</p>
             </div>
-            <div className="rounded-xl bg-card p-3 shadow-card text-center hover:ring-1 hover:ring-primary/30 transition">
-              <Target className="h-4 w-4 mx-auto text-secondary" />
-              <p className="mt-1 font-display text-lg font-bold">{rating.asForward}</p>
-              <p className="text-[10px] text-muted-foreground">Delantero</p>
+            <div className="rounded-2xl bg-gradient-to-br from-secondary/15 to-secondary/5 p-4 text-center border border-secondary/10">
+              <Target className="h-5 w-5 mx-auto text-secondary" />
+              <p className="mt-1.5 font-display text-2xl font-bold">{rating.asForward}</p>
+              <p className="text-[10px] text-muted-foreground font-medium">Delantero</p>
             </div>
           </div>
-          {!showBreakdown && <p className="text-[9px] text-muted-foreground text-center mt-1">Toca para ver desglose</p>}
-
-          {/* Rating Breakdown Panel */}
-          {showBreakdown && (
-            <div className="mt-3 rounded-xl bg-card p-4 shadow-card animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-display text-sm font-semibold">📊 Rendimiento por contexto</h3>
-                <button onClick={(e) => { e.stopPropagation(); setShowBreakdown(false); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-              </div>
-              <div className="space-y-3 text-xs">
-                {/* Mode stats */}
-                <div>
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Modo de juego</p>
-                  {(() => {
-                    const modes = Object.entries(contextStats.byMode);
-                    if (modes.length === 0) return <p className="text-muted-foreground italic">Sin datos de modo aún</p>;
-                    const sorted = modes.sort(([,a],[,b]) => {
-                      const wrA = a.matches > 0 ? a.wins / a.matches : 0;
-                      const wrB = b.matches > 0 ? b.wins / b.matches : 0;
-                      return wrB - wrA;
-                    });
-                    const bestMode = sorted[0];
-                    const worstMode = sorted.length > 1 ? sorted[sorted.length - 1] : null;
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          {sorted.map(([mode, stats]) => {
-                            const wr = stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0;
-                            return (
-                              <div key={mode} className="rounded-lg bg-muted p-2">
-                                <div className="flex justify-between items-center mb-0.5">
-                                  <span className="capitalize font-medium">{mode}</span>
-                                  <span className="font-bold">{wr}%</span>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground">{stats.matches} partidos · {stats.wins}V / {stats.losses}D</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="flex gap-3 mt-1.5 text-[10px]">
-                          <span className="text-success font-semibold">✓ Mejor: <span className="capitalize">{bestMode[0]}</span></span>
-                          {worstMode && worstMode[0] !== bestMode[0] && (
-                            <span className="text-destructive font-semibold">✗ Peor: <span className="capitalize">{worstMode[0]}</span></span>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Table stats */}
-                <div>
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Mesas</p>
-                  {(() => {
-                    const tables = Object.entries(contextStats.byTable);
-                    if (tables.length === 0) return <p className="text-muted-foreground italic">Sin datos de mesa aún</p>;
-                    const sorted = tables.sort(([,a],[,b]) => {
-                      const wrA = a.matches > 0 ? a.wins / a.matches : 0;
-                      const wrB = b.matches > 0 ? b.wins / b.matches : 0;
-                      return wrB - wrA;
-                    });
-                    const bestTable = sorted[0];
-                    const worstTable = sorted.length > 1 ? sorted[sorted.length - 1] : null;
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          {sorted.map(([table, stats]) => {
-                            const wr = stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0;
-                            return (
-                              <div key={table} className="rounded-lg bg-muted p-2">
-                                <div className="flex justify-between items-center mb-0.5">
-                                  <span className="font-medium">{table}</span>
-                                  <span className="font-bold">{wr}%</span>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground">{stats.matches} partidos · {stats.wins}V / {stats.losses}D</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="flex gap-3 mt-1.5 text-[10px]">
-                          <span className="text-success font-semibold">✓ Mejor: {bestTable[0]}</span>
-                          {worstTable && worstTable[0] !== bestTable[0] && (
-                            <span className="text-destructive font-semibold">✗ Peor: {worstTable[0]}</span>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Explanation */}
-                <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    El contexto (modo y mesa) influye con un pequeño coeficiente (0.85–1.15) en cada partido: en tu mejor contexto ganar da algo menos y perder penaliza más. Los únicos ratings reales son ELO General, Portero y Delantero.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
