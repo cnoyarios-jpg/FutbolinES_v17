@@ -62,7 +62,7 @@ function buildPostalCodeIndex(): Record<string, PostalCodeLocation> {
 
     const postalCode = line.slice(0, firstComma).trim();
     const municipalityId = line.slice(firstComma + 1, secondComma).trim();
-    const municipality = unquoteCsv(line.slice(secondComma + 1));
+    const municipality = fixArticleSuffix(unquoteCsv(line.slice(secondComma + 1)));
 
     if (!/^\d{5}$/.test(postalCode) || !/^\d{5}$/.test(municipalityId) || !municipality) continue;
 
