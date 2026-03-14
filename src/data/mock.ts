@@ -1753,10 +1753,10 @@ export function getUserPendingInvites(userId: string): (TeamMember & { teamName:
 }
 
 // Team league creation
-export function createTeamLeague(name: string, teamIds: string[], pairingsPerMatch: number = 3): TeamLeague {
+export function createTeamLeague(name: string, teamIds: string[], pairingsPerMatch: number = 3, season?: string): TeamLeague {
   const league: TeamLeague = {
     id: `tl_${Date.now()}`, name, teamIds, pairingsPerMatch,
-    status: 'activa', createdAt: new Date().toISOString(),
+    status: 'activa', createdAt: new Date().toISOString(), season,
   };
   saveTeamLeague(league);
   return league;
