@@ -1360,19 +1360,51 @@ export default function TournamentDetailPage() {
           <div className="flex flex-col gap-3">
             {eloChanges.map((ec, i) => (
               <div key={i} className="rounded-lg bg-muted p-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Partido {ec.matchKey}</p>
-                {ec.changes.map((c, j) => (
-                  <div key={j} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="font-medium">{c.displayName} <span className="text-muted-foreground">({c.position})</span></span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-muted-foreground">{c.previousElo}</span>
-                      <span className={c.change >= 0 ? 'text-success font-semibold' : 'text-destructive font-semibold'}>
-                        {c.change >= 0 ? `+${c.change}` : c.change}
-                      </span>
-                      <span className="font-bold">{c.newElo}</span>
-                    </span>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground">Partido {ec.matchKey}</p>
+                  {ec.hasGuests && (
+                    <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[9px] font-semibold text-warning-foreground">Con invitados</span>
+                  )}
+                </div>
+
+                {ec.changes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin cambios aplicables.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {ec.changes.map((c, j) => (
+                      <div key={j} className="rounded-md bg-card/70 p-2">
+                        <div className="flex items-center justify-between text-xs py-0.5">
+                          <span className="font-medium">{c.displayName} <span className="text-muted-foreground">({c.position})</span></span>
+                          <span className="flex items-center gap-1">
+                            <span className="text-muted-foreground">{c.previousElo}</span>
+                            <span className={c.change > 0 ? 'text-success font-semibold' : c.change < 0 ? 'text-destructive font-semibold' : 'text-muted-foreground font-semibold'}>
+                              {c.change >= 0 ? `+${c.change}` : c.change}
+                            </span>
+                            <span className="font-bold">{c.newElo}</span>
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                          <span>Total aplicado: <span className="font-semibold text-foreground">{c.totalAppliedChange >= 0 ? `+${c.totalAppliedChange}` : c.totalAppliedChange}</span></span>
+                          <span>General: {c.previousGeneral} → {c.newGeneral}</span>
+                          <span>ΔModo: {c.modeChange >= 0 ? `+${c.modeChange}` : c.modeChange}</span>
+                          <span>ΔMesa: {c.tableChange >= 0 ? `+${c.tableChange}` : c.tableChange}</span>
+                        </div>
+
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[10px] font-medium text-primary">Ver ELO efectivo usado</summary>
+                          <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
+                            <span>ELO general: <span className="font-semibold text-foreground">{c.baseGeneralElo}</span></span>
+                            <span>ELO posición: <span className="font-semibold text-foreground">{c.basePositionElo}</span></span>
+                            <span>Ajuste modo: <span className="font-semibold text-foreground">{c.modeAdjust >= 0 ? `+${c.modeAdjust}` : c.modeAdjust}</span></span>
+                            <span>Ajuste mesa: <span className="font-semibold text-foreground">{c.tableAdjust >= 0 ? `+${c.tableAdjust}` : c.tableAdjust}</span></span>
+                            <span className="col-span-2">ELO efectivo: <span className="font-semibold text-foreground">{c.effectiveElo}</span></span>
+                          </div>
+                        </details>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             ))}
           </div>
