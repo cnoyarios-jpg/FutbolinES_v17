@@ -1167,6 +1167,27 @@ export function persistPairs() {
   localStorage.setItem(PAIRS_OVERRIDES_KEY, JSON.stringify(MOCK_PAIRS));
 }
 
+// ===== 5-ELO HELPERS =====
+
+export type EloKey = 'goalkeeperStill' | 'goalkeeperMoving' | 'forwardStill' | 'forwardMoving';
+
+export function getEloKey(position: 'portero' | 'delantero', mode: 'parado' | 'movimiento'): EloKey {
+  if (position === 'portero') return mode === 'parado' ? 'goalkeeperStill' : 'goalkeeperMoving';
+  return mode === 'parado' ? 'forwardStill' : 'forwardMoving';
+}
+
+export function recalcGeneralElo(ranking: typeof MOCK_RANKINGS[0]) {
+  // Ensure fields exist (migration from old data)
+  if (ranking.goalkeeperStill == null) ranking.goalkeeperStill = ranking.asGoalkeeper || 1500;
+  if (ranking.goalkeeperMoving == null) ranking.goalkeeperMoving = ranking.asGoalkeeper || 1500;
+  if (ranking.forwardStill == null) ranking.forwardStill = ranking.asForward || 1500;
+  if (ranking.forwardMoving == null) ranking.forwardMoving = ranking.asForward || 1500;
+  
+  ranking.asGoalkeeper = Math.round((ranking.goalkeeperStill + ranking.goalkeeperMoving) / 2);
+  ranking.asForward = Math.round((ranking.forwardStill + ranking.forwardMoving) / 2);
+  ranking.general = Math.round((ranking.goalkeeperStill + ranking.goalkeeperMoving + ranking.forwardStill + ranking.forwardMoving) / 4);
+}
+
 // ===== CONTEXT STATS (mode & table performance tracking) =====
 
 export interface ContextStats {
