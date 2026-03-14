@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { registerUser, loginUser, isNicknameAvailable, isDisplayNameAvailable } from '@/data/mock';
+import { registerUser, loginUser, isNicknameAvailable, isDisplayNameAvailable, getCityFromPostalCode } from '@/data/mock';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
 
@@ -21,6 +21,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [preferredTable, setPreferredTable] = useState<TableBrand>('Presas');
   const [nicknameError, setNicknameError] = useState('');
   const [displayNameError, setDisplayNameError] = useState('');
+
+  const derivedCity = postalCode.length >= 2 ? getCityFromPostalCode(postalCode) : '';
 
   const handleNicknameChange = (value: string) => {
     setNickname(value);
@@ -79,7 +81,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       toast.error('La contraseña debe tener al menos 4 caracteres');
       return;
     }
-    // Postal code: required, exactly 5 digits
     if (!postalCode.trim()) {
       toast.error('El código postal es obligatorio');
       return;
@@ -101,7 +102,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       displayName: displayName.trim(),
       email: email.trim(),
       password,
-      city: '',
+      city: derivedCity,
       postalCode: postalCode.trim(),
       preferredPosition: position,
       preferredStyle: style,
@@ -125,14 +126,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <p className="mt-2 text-sm text-muted-foreground">Todo el futbolín español en una app</p>
         </div>
 
-        <div className="rounded-xl bg-card p-6 shadow-elevated">
+        <div className="rounded-2xl bg-card p-6 shadow-elevated border border-border/30">
           <div className="flex gap-1 mb-6">
             <button onClick={() => setIsRegister(false)}
-              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${!isRegister ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${!isRegister ? 'bg-primary text-primary-foreground shadow-md' : 'bg-muted text-muted-foreground'}`}>
               Iniciar sesión
             </button>
             <button onClick={() => setIsRegister(true)}
-              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${isRegister ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${isRegister ? 'bg-primary text-primary-foreground shadow-md' : 'bg-muted text-muted-foreground'}`}>
               Registrarse
             </button>
           </div>
@@ -141,9 +142,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {isRegister && (
               <>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nickname *</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Nickname *</label>
                   <input
-                    className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${nicknameError ? 'border-destructive' : 'border-input'} bg-card`}
+                    className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${nicknameError ? 'border-destructive' : 'border-input'} bg-card`}
                     placeholder="Tu nickname único"
                     value={nickname}
                     onChange={e => handleNicknameChange(e.target.value)}
@@ -151,9 +152,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   {nicknameError && <p className="mt-1 text-xs text-destructive">{nicknameError}</p>}
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nombre completo *</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Nombre completo *</label>
                   <input
-                    className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${displayNameError ? 'border-destructive' : 'border-input'} bg-card`}
+                    className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${displayNameError ? 'border-destructive' : 'border-input'} bg-card`}
                     placeholder="Tu nombre"
                     value={displayName}
                     onChange={e => handleDisplayNameChange(e.target.value)}
@@ -164,20 +165,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             )}
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email *</label>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Email *</label>
               <input
                 type="email"
-                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="mt-1 w-full rounded-xl border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="tu@email.com"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contraseña *</label>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Contraseña *</label>
               <input
                 type="password"
-                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="mt-1 w-full rounded-xl border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -187,9 +188,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {isRegister && (
               <>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
                   <input
-                    className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`}
+                    className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`}
                     placeholder="Ej: 28001"
                     value={postalCode}
                     onChange={e => {
@@ -202,31 +203,34 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   {postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) && (
                     <p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>
                   )}
+                  {derivedCity && postalCode.length >= 2 && (
+                    <p className="mt-1 text-xs text-success font-medium">📍 {derivedCity}</p>
+                  )}
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Posición preferida</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Posición preferida</label>
                   <div className="flex gap-2">
                     {(['portero', 'delantero'] as Position[]).map(p => (
                       <button key={p} onClick={() => setPosition(p)}
-                        className={`flex-1 rounded-lg border p-2 text-center text-xs font-semibold capitalize transition ${position === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{p}</button>
+                        className={`flex-1 rounded-xl border p-2.5 text-center text-xs font-bold capitalize transition ${position === p ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{p}</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Estilo de juego</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Estilo de juego</label>
                   <div className="flex gap-2">
                     {(['parado', 'movimiento'] as const).map(s => (
                       <button key={s} onClick={() => setStyle(s)}
-                        className={`flex-1 rounded-lg border p-2 text-center text-xs font-semibold capitalize transition ${style === s ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{s}</button>
+                        className={`flex-1 rounded-xl border p-2.5 text-center text-xs font-bold capitalize transition ${style === s ? 'border-primary bg-primary/5 text-primary' : 'border-border text-foreground'}`}>{s}</button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Mesa preferida</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 block">Mesa preferida</label>
                   <div className="flex flex-wrap gap-1.5">
                     {TABLE_BRANDS.map(brand => (
                       <button key={brand} onClick={() => setPreferredTable(brand)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${preferredTable === brand ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{brand}</button>
+                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${preferredTable === brand ? 'bg-primary text-primary-foreground shadow-md' : 'bg-muted text-muted-foreground'}`}>{brand}</button>
                     ))}
                   </div>
                 </div>
@@ -235,7 +239,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
             <button
               onClick={isRegister ? handleRegister : handleLogin}
-              className="mt-2 w-full rounded-lg bg-primary py-3 text-center font-display font-semibold text-primary-foreground transition active:scale-[0.98]"
+              className="mt-2 w-full rounded-xl bg-primary py-3 text-center font-display font-bold text-primary-foreground shadow-md transition active:scale-[0.98]"
             >
               {isRegister ? 'Crear cuenta' : 'Entrar'}
             </button>

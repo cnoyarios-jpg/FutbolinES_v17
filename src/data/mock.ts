@@ -35,6 +35,29 @@ const PAIRS_OVERRIDES_KEY = 'futbolines_pairs_overrides';
 const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
 const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 
+// ===== POSTAL CODE → CITY MAPPING =====
+const POSTAL_CITY_MAP: Record<string, string> = {
+  '28': 'Madrid', '08': 'Barcelona', '48': 'Bilbao', '41': 'Sevilla',
+  '46': 'Valencia', '29': 'Málaga', '50': 'Zaragoza', '15': 'A Coruña',
+  '36': 'Vigo', '33': 'Oviedo', '18': 'Granada', '30': 'Murcia',
+  '35': 'Las Palmas', '38': 'Tenerife', '07': 'Palma', '47': 'Valladolid',
+  '01': 'Vitoria', '20': 'San Sebastián', '31': 'Pamplona', '39': 'Santander',
+  '10': 'Cáceres', '06': 'Badajoz', '45': 'Toledo', '13': 'Ciudad Real',
+  '02': 'Albacete', '16': 'Cuenca', '19': 'Guadalajara', '44': 'Teruel',
+  '22': 'Huesca', '42': 'Soria', '40': 'Segovia', '05': 'Ávila',
+  '49': 'Zamora', '34': 'Palencia', '09': 'Burgos', '24': 'León',
+  '37': 'Salamanca', '26': 'Logroño', '11': 'Cádiz', '14': 'Córdoba',
+  '23': 'Jaén', '04': 'Almería', '21': 'Huelva', '43': 'Tarragona',
+  '25': 'Lleida', '17': 'Girona', '03': 'Alicante', '12': 'Castellón',
+  '27': 'Lugo', '32': 'Ourense', '51': 'Ceuta', '52': 'Melilla',
+};
+
+export function getCityFromPostalCode(postalCode: string): string {
+  if (!postalCode || postalCode.length < 2) return '';
+  const prefix = postalCode.slice(0, 2);
+  return POSTAL_CITY_MAP[prefix] || '';
+}
+
 export function getRegisteredUsers(): RegisteredUser[] {
   try {
     return JSON.parse(localStorage.getItem(REGISTERED_USERS_KEY) || '[]');
@@ -68,8 +91,11 @@ export function registerUser(data: Omit<RegisteredUser, 'id' | 'createdAt' | 'pl
   if (users.some(u => u.email.toLowerCase() === data.email.toLowerCase())) {
     return { success: false, error: 'Este email ya está registrado.' };
   }
+  // Derive city from postal code if not provided
+  const city = data.city || (data.postalCode ? getCityFromPostalCode(data.postalCode) : '');
   const newUser: RegisteredUser = {
     ...data,
+    city,
     id: `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     playerType: 'registrado',
     createdAt: new Date().toISOString().split('T')[0],
@@ -77,7 +103,7 @@ export function registerUser(data: Omit<RegisteredUser, 'id' | 'createdAt' | 'pl
   users.push(newUser);
   saveRegisteredUsers(users);
   setCurrentUser(newUser);
-  ensureRankingEntry(newUser.id, newUser.displayName, newUser.city, newUser.postalCode, newUser.preferredPosition, newUser.preferredStyle, newUser.preferredTable);
+  ensureRankingEntry(newUser.id, newUser.displayName, city, newUser.postalCode, newUser.preferredPosition, newUser.preferredStyle, newUser.preferredTable);
   return { success: true, user: newUser };
 }
 
@@ -91,9 +117,11 @@ export function ensureRankingEntry(
   preferredTable?: TableBrand
 ) {
   const existing = MOCK_RANKINGS.find(r => r.userId === userId);
+  // Derive city from postal code if missing
+  const resolvedCity = city || (postalCode ? getCityFromPostalCode(postalCode) : '');
   if (!existing) {
     MOCK_RANKINGS.push({
-      userId, displayName, city: city || '', postalCode,
+      userId, displayName, city: resolvedCity, postalCode,
       general: 1500, asGoalkeeper: 1500, asForward: 1500,
       goalkeeperStill: 1500, goalkeeperMoving: 1500, forwardStill: 1500, forwardMoving: 1500,
       byTable: {}, byStyle: { parado: 0, movimiento: 0 },
@@ -103,6 +131,9 @@ export function ensureRankingEntry(
       playerType: 'registrado',
     });
     persistRankings();
+  } else if (!existing.city && postalCode) {
+    existing.city = getCityFromPostalCode(postalCode);
+    persistRankings();
   }
 }
 
@@ -110,6 +141,11 @@ export function loginUser(email: string, password: string): { success: boolean; 
   const users = getRegisteredUsers();
   const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
   if (!user) return { success: false, error: 'Email o contraseña incorrectos.' };
+  // Derive city if missing
+  if (!user.city && user.postalCode) {
+    user.city = getCityFromPostalCode(user.postalCode);
+    saveRegisteredUsers(users);
+  }
   setCurrentUser(user);
   ensureRankingEntry(user.id, user.displayName, user.city, user.postalCode, user.preferredPosition, user.preferredStyle, user.preferredTable);
   return { success: true, user };
@@ -281,7 +317,6 @@ export function openCheckIn(tournamentId: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
   if (tournament) {
     tournament.checkInOpen = true;
-    // Set all pairs to pending
     MOCK_PAIRS.filter(p => p.tournamentId === tournamentId).forEach(p => {
       if (!p.checkInStatus) p.checkInStatus = 'pendiente';
     });
@@ -350,7 +385,6 @@ export function deleteTeam(teamId: string) {
   localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teams));
   const idx = MOCK_TEAMS.findIndex(t => t.id === teamId);
   if (idx >= 0) MOCK_TEAMS.splice(idx, 1);
-  // Remove members
   const members: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
   localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(members.filter(m => m.teamId !== teamId)));
 }
@@ -365,7 +399,6 @@ export function getTeamMembers(teamId: string): TeamMember[] {
 export function addTeamMember(member: TeamMember) {
   try {
     const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
-    // Avoid duplicates
     if (all.some(m => m.teamId === member.teamId && m.userId === member.userId)) return;
     all.push(member);
     localStorage.setItem(TEAM_MEMBERS_KEY, JSON.stringify(all));
@@ -429,7 +462,6 @@ export function recordTournamentWin(tournamentId: string, winnerPairId: string) 
       if (ranking) {
         ranking.tournamentsWon = (ranking.tournamentsWon || 0) + 1;
         ranking.tournamentsPlayed = (ranking.tournamentsPlayed || 0) + 1;
-        // Achievements
         if (ranking.tournamentsWon >= 1) checkAndGrantAchievement(userId, 'first_tournament_win');
         if (ranking.tournamentsWon >= 5) checkAndGrantAchievement(userId, 'five_tournament_wins');
         if (ranking.tournamentsWon >= 10) checkAndGrantAchievement(userId, 'ten_tournament_wins');
@@ -578,7 +610,6 @@ export function getSeasons(): Season[] {
 
 export function createSeason(name: string, startDate: string, endDate: string): Season {
   const seasons = getSeasons();
-  // Deactivate current active
   seasons.forEach(s => s.isActive = false);
   const newSeason: Season = { id: `season_${Date.now()}`, name, startDate, endDate, isActive: true };
   seasons.push(newSeason);
@@ -594,103 +625,59 @@ export function getActiveSeason(): Season | null {
 
 import { TIERED_ACHIEVEMENTS, calculateLevel, PlayerTieredAchievement } from '@/types/achievements';
 
-// Legacy definitions for backwards compatibility
 export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   { id: 'first_tournament_win', name: 'Primera victoria', description: 'Gana tu primer torneo', icon: '🏆' },
   { id: 'five_tournament_wins', name: 'Pentacampeón', description: 'Gana 5 torneos', icon: '⭐' },
   { id: 'ten_tournament_wins', name: 'Leyenda', description: 'Gana 10 torneos', icon: '👑' },
   { id: 'ten_win_streak', name: 'Imparable', description: 'Racha de 10 victorias', icon: '🔥' },
-  { id: 'mvp_tournament', name: 'MVP', description: 'Ser jugador del torneo', icon: '🌟' },
-  { id: 'play_3_venues', name: 'Explorador', description: 'Jugar en 3 bares distintos', icon: '🗺️' },
-  { id: 'play_5_tables', name: 'Versátil', description: 'Jugar en 5 mesas distintas', icon: '🎯' },
+  { id: 'mvp_tournament', name: 'MVP', description: 'Jugador del torneo', icon: '🌟' },
+  { id: 'play_3_venues', name: 'Trotamundos', description: 'Juega en 3 locales diferentes', icon: '🗺️' },
+  { id: 'play_5_tables', name: 'Polivalente', description: 'Juega en 5 mesas diferentes', icon: '🎯' },
 ];
 
-// ===== TIERED ACHIEVEMENTS STORAGE =====
-const TIERED_ACHIEVEMENTS_KEY = 'futbolines_tiered_achievements';
+// ===== FREQUENT PARTNERS =====
 
-function getTieredAchievementsStore(): Record<string, PlayerTieredAchievement[]> {
-  try {
-    return JSON.parse(localStorage.getItem(TIERED_ACHIEVEMENTS_KEY) || '{}');
-  } catch { return {}; }
-}
-
-function saveTieredAchievementsStore(store: Record<string, PlayerTieredAchievement[]>) {
-  localStorage.setItem(TIERED_ACHIEVEMENTS_KEY, JSON.stringify(store));
-}
-
-export function getPlayerTieredAchievements(userId: string): PlayerTieredAchievement[] {
-  const store = getTieredAchievementsStore();
-  return store[userId] || [];
-}
-
-export function updatePlayerAchievementProgress(userId: string, achievementId: string, newValue: number) {
-  const store = getTieredAchievementsStore();
-  if (!store[userId]) store[userId] = [];
-  
-  let achievement = store[userId].find(a => a.achievementId === achievementId);
-  const definition = TIERED_ACHIEVEMENTS.find(d => d.id === achievementId);
-  if (!definition) return;
-  
-  if (!achievement) {
-    achievement = { achievementId, currentValue: 0, unlockedTiers: [] };
-    store[userId].push(achievement);
-  }
-  
-  const oldLevel = calculateLevel(achievement.currentValue, definition.tiers);
-  achievement.currentValue = newValue;
-  const newLevel = calculateLevel(newValue, definition.tiers);
-  
-  // Unlock new tiers
-  for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
-    if (!achievement.unlockedTiers.some(t => t.level === lvl)) {
-      achievement.unlockedTiers.push({ level: lvl, unlockedAt: new Date().toISOString() });
-    }
-  }
-  
-  saveTieredAchievementsStore(store);
-}
-
-// ===== CALCULATE TOURNAMENT AVG ELO =====
-export function calculateTournamentAvgElo(tournamentId: string): { avgElo: number; registeredCount: number } {
-  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
-  const registeredElos: number[] = [];
-  
-  pairs.forEach(p => {
-    if (!isGuestPlayer(p.goalkeeper.userId)) {
-      const gkR = MOCK_RANKINGS.find(r => r.userId === p.goalkeeper.userId);
-      if (gkR) registeredElos.push(gkR.general);
-    }
-    if (!isGuestPlayer(p.forward.userId)) {
-      const fwR = MOCK_RANKINGS.find(r => r.userId === p.forward.userId);
-      if (fwR) registeredElos.push(fwR.general);
+export function getFrequentPartners(userId: string): { partnerId: string; partnerName: string; count: number; wins: number; losses: number }[] {
+  const partners: Record<string, { name: string; count: number; wins: number; losses: number }> = {};
+  MOCK_PAIRS.forEach(pair => {
+    if (pair.goalkeeper.userId === userId) {
+      const p = pair.forward;
+      if (!partners[p.userId]) partners[p.userId] = { name: p.displayName, count: 0, wins: 0, losses: 0 };
+      partners[p.userId].count++;
+      if (pair.status === 'ganadora') partners[p.userId].wins++;
+      else if (pair.status === 'eliminada') partners[p.userId].losses++;
+    } else if (pair.forward.userId === userId) {
+      const p = pair.goalkeeper;
+      if (!partners[p.userId]) partners[p.userId] = { name: p.displayName, count: 0, wins: 0, losses: 0 };
+      partners[p.userId].count++;
+      if (pair.status === 'ganadora') partners[p.userId].wins++;
+      else if (pair.status === 'eliminada') partners[p.userId].losses++;
     }
   });
-  
-  const avgElo = registeredElos.length > 0 
-    ? Math.round(registeredElos.reduce((a, b) => a + b, 0) / registeredElos.length) 
-    : 0;
-  
-  return { avgElo, registeredCount: registeredElos.length };
+  return Object.entries(partners)
+    .map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count, wins: data.wins, losses: data.losses }))
+    .sort((a, b) => b.count - a.count);
 }
 
-// ===== MVP RECORDS WITH CONTEXT =====
+// ===== MVP RECORDS =====
+
 export interface MvpRecord {
   tournamentId: string;
   tournamentName: string;
   date: string;
   venueName?: string;
   format?: string;
-  avgElo: number;
+  avgElo?: number;
 }
 
-const MVP_RECORDS_KEY = 'futbolines_mvp_records';
-
 function getMvpRecordsStore(): Record<string, MvpRecord[]> {
-  try { return JSON.parse(localStorage.getItem(MVP_RECORDS_KEY) || '{}'); } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem('futbolines_mvp_records') || '{}');
+  } catch { return {}; }
 }
 
 function saveMvpRecordsStore(store: Record<string, MvpRecord[]>) {
-  localStorage.setItem(MVP_RECORDS_KEY, JSON.stringify(store));
+  localStorage.setItem('futbolines_mvp_records', JSON.stringify(store));
 }
 
 export function getPlayerMvpRecords(userId: string): MvpRecord[] {
@@ -700,7 +687,6 @@ export function getPlayerMvpRecords(userId: string): MvpRecord[] {
 export function saveMvpRecord(userId: string, record: MvpRecord) {
   const store = getMvpRecordsStore();
   if (!store[userId]) store[userId] = [];
-  // Avoid duplicates
   if (!store[userId].some(r => r.tournamentId === record.tournamentId)) {
     store[userId].push(record);
     saveMvpRecordsStore(store);
@@ -744,17 +730,23 @@ export function checkAndGrantAchievement(userId: string, achievementId: Achievem
   savePlayerAchievement(userId, achievementId);
 }
 
+export function calculateTournamentAvgElo(tournamentId: string): { avgElo: number; count: number } {
+  const pairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
+  const elos: number[] = [];
+  pairs.forEach(p => { elos.push(p.goalkeeper.elo, p.forward.elo); });
+  const avg = elos.length > 0 ? Math.round(elos.reduce((a, b) => a + b, 0) / elos.length) : 1500;
+  return { avgElo: avg, count: elos.length };
+}
+
 export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpName: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
   if (!tournament) return;
   tournament.mvpPlayerId = mvpUserId;
   tournament.mvpPlayerName = mvpName;
   
-  // Calculate and save MVP record with context
   const { avgElo } = calculateTournamentAvgElo(tournamentId);
   const venue = MOCK_VENUES.find(v => v.id === tournament.venueId);
   
-  // Check if tournament has guests - no MVP ELO if so
   const mvpPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
   const hasGuestsInTournament = mvpPairs.some(p =>
     isGuestPlayer(p.goalkeeper.userId) || isGuestPlayer(p.forward.userId)
@@ -766,7 +758,6 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
 
       if (!hasGuestsInTournament) {
-        // MVP ELO bonus — update the specific position+mode ELO
         const mvpBonus = getTournamentMVPBonus(tournamentId);
         const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
         const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
@@ -781,7 +772,6 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
         addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       }
       
-      // Update tiered achievements
       updatePlayerAchievementProgress(mvpUserId, 'mvp_count', ranking.mvpCount);
       if (avgElo >= 1600) {
         const currentHighLevelMvps = getPlayerMvpRecords(mvpUserId).filter(r => r.avgElo >= 1600).length + 1;
@@ -789,7 +779,6 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       }
     }
     
-    // Save MVP record with tournament context
     saveMvpRecord(mvpUserId, {
       tournamentId,
       tournamentName: tournament.name,
@@ -804,6 +793,7 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
   persistRankings();
   persistTournaments();
 }
+
 export function finalizeTournament(tournamentId: string, winnerPairId?: string) {
   const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
   if (!tournament) return;
@@ -811,7 +801,6 @@ export function finalizeTournament(tournamentId: string, winnerPairId?: string) 
   if (winnerPairId) {
     recordTournamentWin(tournamentId, winnerPairId);
   }
-  // Check achievements for all participants
   const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournamentId);
   tPairs.forEach(p => {
     [p.goalkeeper.userId, p.forward.userId].forEach(uid => {
@@ -835,7 +824,6 @@ export function getUserAchievements(userId: string): (Achievement & { unlockedAt
     .filter((item): item is Achievement & { unlockedAt: string } => Boolean(item));
 }
 
-// Check streak achievement
 export function checkStreakAchievement(userId: string) {
   const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
   if (ranking && ranking.currentStreak >= 10) {
@@ -843,7 +831,6 @@ export function checkStreakAchievement(userId: string) {
   }
 }
 
-// Check venue/table achievements
 export function checkVenueTableAchievements(userId: string) {
   const venueIds = new Set<string>();
   const tableBrands = new Set<string>();
@@ -901,7 +888,8 @@ export function getLeagueStandings(leagueId: string): { userId: string; displayN
         playerStats[m.userId].wins++;
       });
     });
-    MOCK_PAIRS.filter(p => p.tournamentId === tId && p.status !== 'ganadora').forEach(p => {
+    const loserPairs = MOCK_PAIRS.filter(p => p.tournamentId === tId && p.status !== 'ganadora');
+    loserPairs.forEach(p => {
       [p.goalkeeper, p.forward].forEach(m => {
         if (!playerStats[m.userId]) playerStats[m.userId] = { displayName: m.displayName, points: 0, wins: 0, losses: 0 };
         playerStats[m.userId].points += 1;
@@ -909,8 +897,50 @@ export function getLeagueStandings(leagueId: string): { userId: string; displayN
       });
     });
   });
+  return Object.entries(playerStats)
+    .map(([userId, data]) => ({ userId, ...data }))
+    .sort((a, b) => b.points - a.points);
+}
 
-  return Object.entries(playerStats).map(([userId, data]) => ({ userId, ...data })).sort((a, b) => b.points - a.points);
+// ===== TEAM RANKING =====
+
+export function getTeamRanking(): (Team & { stats: TeamStats; winrate: number })[] {
+  return MOCK_TEAMS.map(team => {
+    const stats = getTeamStats(team.id);
+    const total = stats.wins + stats.losses;
+    return { ...team, stats, winrate: total > 0 ? Math.round((stats.wins / total) * 100) : 0 };
+  }).sort((a, b) => b.elo - a.elo);
+}
+
+// ===== TIERED ACHIEVEMENTS (PROGRESS-BASED) =====
+
+const TIERED_PROGRESS_KEY = 'futbolines_tiered_achievements';
+
+function getTieredProgressStore(): Record<string, Record<string, number>> {
+  try {
+    return JSON.parse(localStorage.getItem(TIERED_PROGRESS_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function saveTieredProgressStore(store: Record<string, Record<string, number>>) {
+  localStorage.setItem(TIERED_PROGRESS_KEY, JSON.stringify(store));
+}
+
+export function updatePlayerAchievementProgress(userId: string, achievementId: string, progress: number) {
+  const store = getTieredProgressStore();
+  if (!store[userId]) store[userId] = {};
+  store[userId][achievementId] = Math.max(store[userId][achievementId] || 0, progress);
+  saveTieredProgressStore(store);
+}
+
+export function getPlayerTieredAchievements(userId: string): PlayerTieredAchievement[] {
+  const store = getTieredProgressStore();
+  const playerProgress = store[userId] || {};
+  return TIERED_ACHIEVEMENTS.map(achievement => {
+    const progress = playerProgress[achievement.id] || 0;
+    const level = calculateLevel(achievement, progress);
+    return { ...achievement, currentProgress: progress, currentLevel: level };
+  });
 }
 
 // ===== RESULT CORRECTIONS =====
@@ -930,173 +960,175 @@ export function saveCorrection(correction: ResultCorrection) {
   } catch {}
 }
 
-// ===== MOCK DATA =====
+// ===== MOCK USER =====
 
 export const MOCK_USER: User = {
-  id: 'u1', email: 'carlos@ejemplo.com', nickname: 'CarlosGK', displayName: 'Carlos García',
-  city: 'Madrid', postalCode: '28001', preferredPosition: 'portero', preferredStyle: 'parado',
-  preferredTable: 'Presas', playerType: 'registrado', createdAt: '2024-01-15',
+  id: 'u1', email: 'carlos@futbol.es', nickname: 'carlitos', displayName: 'Carlos García',
+  city: 'Madrid', postalCode: '28001', avatarUrl: undefined, preferredPosition: 'portero',
+  preferredStyle: 'parado', preferredTable: 'Presas', playerType: 'registrado', createdAt: '2024-01-15',
 };
 
+// ===== VENUES =====
+
 export const MOCK_VENUES: Venue[] = [
-  { id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 92, lastVerified: '2026-02-20', verificationCount: 5, createdBy: 'u1', createdAt: '2024-06-01' },
-  { id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 310', city: 'Barcelona', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 85, lastVerified: '2026-01-10', verificationCount: 3, createdBy: 'u2', createdAt: '2024-07-15' },
-  { id: 'v3', name: 'La Taberna del Gol', address: 'C/ Sierpes 18', city: 'Sevilla', photos: [], status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 60, lastVerified: '2025-08-01', verificationCount: 0, createdBy: 'u3', createdAt: '2024-03-20' },
-  { id: 'v4', name: 'Txoko Futbolín', address: 'C/ Ledesma 12', city: 'Bilbao', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 95, lastVerified: '2026-03-01', verificationCount: 7, createdBy: 'u1', createdAt: '2024-09-01' },
-  { id: 'v5', name: 'Bar La Esquina', address: 'C/ Colón 22', city: 'Valencia', photos: [], status: 'pendiente', verificationLevel: 'en_disputa', confidenceScore: 40, lastVerified: '2025-06-15', verificationCount: 1, createdBy: 'u2', createdAt: '2024-11-01' },
-  { id: 'v6', name: 'Cervecería Gol Norte', address: 'C/ Princesa 8', city: 'Madrid', photos: [], status: 'activo', verificationLevel: 'verificado', confidenceScore: 88, lastVerified: '2026-02-28', verificationCount: 4, createdBy: 'u3', createdAt: '2025-01-10' },
+  { id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid', photos: ['/placeholder.svg'], description: 'Bar clásico con futbolín de competición.', observations: 'Abierto solo fines de semana.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-15', confidenceScore: 92, verificationCount: 5, createdBy: 'u1', createdAt: '2024-01-01' },
+  { id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 305', city: 'Barcelona', photos: ['/placeholder.svg'], description: 'Cafetería deportiva con ambiente competitivo.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-02-01', confidenceScore: 88, verificationCount: 4, createdBy: 'u2', createdAt: '2024-02-15' },
+  { id: 'v3', name: 'La Bolera Social', address: 'Alameda Mazarredo 8', city: 'Bilbao', photos: ['/placeholder.svg'], description: 'Local con zona de juegos y futbolín profesional.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 65, verificationCount: 1, createdBy: 'u3', createdAt: '2024-03-10' },
+  { id: 'v4', name: 'Pub Game Over', address: 'C/ Sierpes 20', city: 'Sevilla', photos: ['/placeholder.svg'], description: 'Pub temático gamer con varios futbolines.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-20', confidenceScore: 85, verificationCount: 3, createdBy: 'u4', createdAt: '2024-04-01' },
+  { id: 'v5', name: 'Bar Universitario', address: 'C/ Doctor Moliner 50', city: 'Valencia', photos: ['/placeholder.svg'], status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 55, verificationCount: 0, createdBy: 'u5', createdAt: '2024-05-01' },
+  { id: 'v6', name: 'Recreativos Luna', address: 'C/ Luna 12', city: 'Madrid', photos: ['/placeholder.svg'], description: 'Sala de recreativos con futbolín clásico.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 60, verificationCount: 1, createdBy: 'u6', createdAt: '2024-06-01' },
 ];
 
 export const MOCK_TABLES: VenueTable[] = [
-  { id: 't1', venueId: 'v1', brand: 'Presas', quantity: 2, condition: 'buen_estado', photos: [] },
-  { id: 't2', venueId: 'v2', brand: 'Tsunami', quantity: 1, condition: 'perfecta', photos: [] },
-  { id: 't3', venueId: 'v3', brand: 'Val', quantity: 1, condition: 'estado_normal', photos: [] },
-  { id: 't4', venueId: 'v4', brand: 'Presas', quantity: 3, condition: 'perfecta', photos: [] },
-  { id: 't5', venueId: 'v5', brand: 'Garlando', quantity: 1, condition: 'deteriorada', photos: [] },
-  { id: 't6', venueId: 'v6', brand: 'Infinity', quantity: 2, condition: 'buen_estado', photos: [] },
+  { id: 't1', venueId: 'v1', brand: 'Presas', quantity: 2, condition: 'buen_estado', photos: ['/placeholder.svg'] },
+  { id: 't2', venueId: 'v2', brand: 'Tsunami', quantity: 1, condition: 'perfecta', photos: ['/placeholder.svg'] },
+  { id: 't3', venueId: 'v3', brand: 'Presas', quantity: 1, condition: 'estado_normal', photos: ['/placeholder.svg'] },
+  { id: 't4', venueId: 'v4', brand: 'Val', quantity: 2, condition: 'buen_estado', photos: ['/placeholder.svg'] },
+  { id: 't5', venueId: 'v5', brand: 'Garlando', quantity: 1, condition: 'estado_normal', photos: ['/placeholder.svg'] },
+  { id: 't6', venueId: 'v6', brand: 'Presas', quantity: 1, condition: 'deteriorada', photos: ['/placeholder.svg'] },
 ];
+
+// ===== TEAMS =====
+
+export const MOCK_TEAMS: Team[] = [
+  { id: 'team1', name: 'Madrid Fury', logoUrl: undefined, city: 'Madrid', postalCode: '28001', captainId: 'u1', elo: 1800, createdAt: '2024-06-01' },
+  { id: 'team2', name: 'Barcelona FC Futbolín', logoUrl: undefined, city: 'Barcelona', postalCode: '08001', captainId: 'u2', elo: 1750, createdAt: '2024-07-15' },
+  { id: 'team3', name: 'Athletic Bilbaíno', logoUrl: undefined, city: 'Bilbao', postalCode: '48001', captainId: 'u3', elo: 1700, createdAt: '2024-08-20' },
+];
+
+// ===== TOURNAMENTS =====
 
 export const MOCK_TOURNAMENTS: Tournament[] = [
   {
-    id: 'to1', name: 'Torneo Gran Vía', description: 'Torneo mensual de parejas en el corazón de Madrid. Premios para los 3 primeros. Consumición incluida.',
-    date: '2026-03-15', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
+    id: 'to1', name: 'Torneo de Primavera Madrid', description: 'Gran torneo de primavera en Madrid.',
+    date: '2026-04-15', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
     city: 'Madrid', tableBrand: 'Presas', playStyle: 'parado',
     format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 16,
-    entryFee: 10, prizes: '1º: 100€ | 2º: 50€ | 3º: 25€',
-    organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
-    status: 'en_curso', hasCategories: false, categories: [], createdAt: '2026-03-01',
+    entryFee: 10, prizes: '1º: 200€, 2º: 100€', organizerId: 'u1', organizerName: 'Carlos García',
+    requiresApproval: false, status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-03-01',
   },
   {
-    id: 'to2', name: 'Liga Diagonal', description: 'Liguilla de primavera en Café Sport. Formato round robin.',
-    date: '2026-03-22', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
+    id: 'to2', name: 'Liga Barcelona Verano', description: 'Liga de verano barcelonesa.',
+    date: '2026-06-01', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
     city: 'Barcelona', tableBrand: 'Tsunami', playStyle: 'movimiento',
     format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
-    entryFee: 5,
-    organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: true,
-    status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-03-05',
+    organizerId: 'u2', organizerName: 'Laura Martínez',
+    requiresApproval: true, status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-04-01',
   },
   {
-    id: 'to3', name: 'Txoko Open', description: 'El torneo más grande del norte. Eliminación doble, categorías Máster y Pro.',
-    date: '2026-04-05', time: '16:00', venueId: 'v4', venueName: 'Txoko Futbolín',
+    id: 'to3', name: 'Campeonato Bilbao', description: 'El campeonato de Bilbao.',
+    date: '2026-05-20', time: '16:00', venueId: 'v3', venueName: 'La Bolera Social',
     city: 'Bilbao', tableBrand: 'Presas', playStyle: 'parado',
-    format: 'eliminacion_doble', pairingMode: 'equilibradas', maxPairs: 32,
-    entryFee: 15, prizes: '1º: 300€ | 2º: 150€',
-    organizerId: 'u3', organizerName: 'Mikel Etxebarria', requiresApproval: false,
-    status: 'abierto', hasCategories: true,
-    categories: [
-      { id: 'c3', tournamentId: 'to3', name: 'Máster', maxPairs: 16 },
-      { id: 'c4', tournamentId: 'to3', name: 'Pro', maxPairs: 16 },
-    ],
-    createdAt: '2026-03-02',
+    format: 'eliminacion_doble', pairingMode: 'equilibradas', maxPairs: 12,
+    entryFee: 5, organizerId: 'u3', organizerName: 'Mikel Etxebarria',
+    requiresApproval: false, status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-04-15',
   },
   {
-    id: 'to4', name: 'Rey de la Pista Madrid', description: 'Formato Rey de la pista: la pareja ganadora permanece, la perdedora sale.',
-    date: '2026-03-20', time: '19:00', venueId: 'v1', venueName: 'Bar El Rincón',
+    id: 'to4', name: 'Rey de la Pista Sevilla', description: 'Formato rey de la pista.',
+    date: '2026-07-10', time: '19:00', venueId: 'v4', venueName: 'Pub Game Over',
+    city: 'Sevilla', tableBrand: 'Val', playStyle: 'movimiento',
+    format: 'rey_mesa', pairingMode: 'inscripcion', maxPairs: 16, kingLaps: 3,
+    organizerId: 'u4', organizerName: 'Ana López',
+    requiresApproval: false, status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-05-01',
+  },
+  {
+    id: 'to5', name: 'Torneo Grupos Madrid', description: 'Fase de grupos + eliminatoria.',
+    date: '2026-08-01', time: '11:00', venueId: 'v1', venueName: 'Bar El Rincón',
     city: 'Madrid', tableBrand: 'Presas', playStyle: 'parado',
-    format: 'rey_mesa', pairingMode: 'inscripcion', maxPairs: 10,
-    entryFee: 5,
-    organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
-    status: 'en_curso', hasCategories: false, categories: [], createdAt: '2026-03-10',
-  },
-  {
-    id: 'to5', name: 'Copa Grupos Madrid', description: 'Torneo de grupos + cuadro final. Fase de grupos con round robin, luego eliminación.',
-    date: '2026-04-12', time: '17:00', venueId: 'v6', venueName: 'Cervecería Gol Norte',
-    city: 'Madrid', tableBrand: 'Infinity', playStyle: 'parado',
-    format: 'grupos_cuadro', pairingMode: 'inscripcion', maxPairs: 12,
-    entryFee: 10,
-    organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
-    status: 'en_curso', hasCategories: false, categories: [], createdAt: '2026-03-08',
+    format: 'grupos_cuadro', pairingMode: 'inscripcion', maxPairs: 16,
     groupSize: 3, qualifyPerGroup: 2,
+    organizerId: 'u1', organizerName: 'Carlos García',
+    requiresApproval: false, status: 'abierto', hasCategories: false, categories: [], createdAt: '2026-06-01',
   },
-  // Historical finished tournaments with MVP data
+  // Historical tournaments
   {
-    id: 'to_h1', name: 'Open Madrid Invierno', description: 'Torneo invernal en el corazón de Madrid.',
-    date: '2025-12-10', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
+    id: 'to_h1', name: 'Campeonato Madrid Otoño', description: 'Primer campeonato de la temporada.',
+    date: '2025-09-15', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
     city: 'Madrid', tableBrand: 'Presas', playStyle: 'parado',
     format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 16,
     entryFee: 10, organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-08-15',
+    mvpPlayerId: 'u1', mvpPlayerName: 'Carlos García',
+  },
+  {
+    id: 'to_h2', name: 'Copa Barcelona Septiembre', description: 'Torneo clásico de septiembre.',
+    date: '2025-09-28', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
+    city: 'Barcelona', tableBrand: 'Tsunami', playStyle: 'movimiento',
+    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 12,
+    entryFee: 8, organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-08-20',
+    mvpPlayerId: 'u2', mvpPlayerName: 'Laura Martínez',
+  },
+  {
+    id: 'to_h3', name: 'Liga Bilbao Otoño', description: 'Liga de otoño en Bilbao.',
+    date: '2025-10-05', time: '16:00', venueId: 'v3', venueName: 'La Bolera Social',
+    city: 'Bilbao', tableBrand: 'Presas', playStyle: 'parado',
+    format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
+    organizerId: 'u3', organizerName: 'Mikel Etxebarria', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-09-01',
+    mvpPlayerId: 'u3', mvpPlayerName: 'Mikel Etxebarria',
+  },
+  {
+    id: 'to_h4', name: 'Copa Sevilla Halloween', description: 'Torneo especial de Halloween.',
+    date: '2025-10-31', time: '20:00', venueId: 'v4', venueName: 'Pub Game Over',
+    city: 'Sevilla', tableBrand: 'Val', playStyle: 'movimiento',
+    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 16,
+    entryFee: 12, organizerId: 'u4', organizerName: 'Ana López', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-09-28',
+    mvpPlayerId: 'u4', mvpPlayerName: 'Ana López',
+  },
+  {
+    id: 'to_h5', name: 'Torneo Valencia Noviembre', description: 'Competición mensual.',
+    date: '2025-11-10', time: '17:00', venueId: 'v5', venueName: 'Bar Universitario',
+    city: 'Valencia', tableBrand: 'Garlando', playStyle: 'parado',
+    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 12,
+    organizerId: 'u5', organizerName: 'Pedro Sánchez', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-10-15',
+    mvpPlayerId: 'u5', mvpPlayerName: 'Pedro Sánchez',
+  },
+  {
+    id: 'to_h6', name: 'Copa Madrid Diciembre', description: 'Último torneo del año.',
+    date: '2025-12-14', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
+    city: 'Madrid', tableBrand: 'Presas', playStyle: 'parado',
+    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 16,
+    entryFee: 15, organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
     status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-11-20',
     mvpPlayerId: 'u1', mvpPlayerName: 'Carlos García',
   },
   {
-    id: 'to_h2', name: 'Copa Navidad Barcelona', description: 'Torneo navideño en Café Sport.',
-    date: '2025-12-22', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
+    id: 'to_h7', name: 'Liga Barcelona Invierno', description: 'Liga invernal.',
+    date: '2025-12-20', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
     city: 'Barcelona', tableBrand: 'Tsunami', playStyle: 'movimiento',
     format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
-    entryFee: 5, organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-12-01',
+    organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-11-25',
     mvpPlayerId: 'u2', mvpPlayerName: 'Laura Martínez',
   },
   {
-    id: 'to_h3', name: 'Torneo Reyes Bilbao', description: 'Torneo especial de Reyes.',
-    date: '2026-01-06', time: '16:00', venueId: 'v4', venueName: 'Txoko Futbolín',
+    id: 'to_h8', name: 'Torneo Rey Bilbao', description: 'Rey de la pista en Bilbao.',
+    date: '2026-01-05', time: '16:00', venueId: 'v3', venueName: 'La Bolera Social',
     city: 'Bilbao', tableBrand: 'Presas', playStyle: 'parado',
-    format: 'eliminacion_doble', pairingMode: 'equilibradas', maxPairs: 16,
-    entryFee: 10, organizerId: 'u3', organizerName: 'Mikel Etxebarria', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-12-20',
-    mvpPlayerId: 'u1', mvpPlayerName: 'Carlos García',
-  },
-  {
-    id: 'to_h4', name: 'Liga Febrero Madrid', description: 'Liga mensual de febrero.',
-    date: '2026-02-15', time: '18:00', venueId: 'v6', venueName: 'Cervecería Gol Norte',
-    city: 'Madrid', tableBrand: 'Infinity', playStyle: 'parado',
-    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 12,
-    entryFee: 8, organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-01-25',
-    mvpPlayerId: 'u2', mvpPlayerName: 'Laura Martínez',
-  },
-  {
-    id: 'to_h5', name: 'Torneo San Valentín', description: 'Torneo especial parejas mixtas.',
-    date: '2026-02-14', time: '19:00', venueId: 'v1', venueName: 'Bar El Rincón',
-    city: 'Madrid', tableBrand: 'Presas', playStyle: 'movimiento',
-    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 16,
-    entryFee: 10, organizerId: 'u6', organizerName: 'María Fernández', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-01-30',
+    format: 'rey_mesa', pairingMode: 'inscripcion', maxPairs: 16, kingLaps: 2,
+    organizerId: 'u3', organizerName: 'Mikel Etxebarria', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-12-15',
     mvpPlayerId: 'u3', mvpPlayerName: 'Mikel Etxebarria',
   },
   {
-    id: 'to_h6', name: 'Copa Carnaval Sevilla', description: 'Torneo de carnaval en Sevilla.',
-    date: '2026-02-28', time: '17:00', venueId: 'v3', venueName: 'La Esquina del Gol',
+    id: 'to_h9', name: 'Copa Sevilla Enero', description: 'Torneo mensual.',
+    date: '2026-01-18', time: '19:00', venueId: 'v4', venueName: 'Pub Game Over',
     city: 'Sevilla', tableBrand: 'Val', playStyle: 'movimiento',
-    format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
-    entryFee: 5, organizerId: 'u4', organizerName: 'Ana López', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-02-10',
+    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 12,
+    entryFee: 10, organizerId: 'u4', organizerName: 'Ana López', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2025-12-28',
     mvpPlayerId: 'u4', mvpPlayerName: 'Ana López',
   },
   {
-    id: 'to_h7', name: 'Open Primavera Madrid', description: 'Apertura de temporada primavera.',
-    date: '2026-03-01', time: '18:00', venueId: 'v1', venueName: 'Bar El Rincón',
+    id: 'to_h10', name: 'Liga Madrid Febrero', description: 'Liga mensual de Madrid.',
+    date: '2026-02-15', time: '18:00', venueId: 'v6', venueName: 'Recreativos Luna',
     city: 'Madrid', tableBrand: 'Presas', playStyle: 'parado',
-    format: 'grupos_cuadro', pairingMode: 'inscripcion', maxPairs: 16,
-    entryFee: 12, organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-02-15',
-    mvpPlayerId: 'u1', mvpPlayerName: 'Carlos García',
-  },
-  {
-    id: 'to_h8', name: 'Txoko Masters', description: 'Torneo de élite en Bilbao.',
-    date: '2026-02-20', time: '16:00', venueId: 'v4', venueName: 'Txoko Futbolín',
-    city: 'Bilbao', tableBrand: 'Presas', playStyle: 'parado',
-    format: 'eliminacion_doble', pairingMode: 'equilibradas', maxPairs: 16,
-    entryFee: 15, organizerId: 'u3', organizerName: 'Mikel Etxebarria', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-02-05',
-    mvpPlayerId: 'u3', mvpPlayerName: 'Mikel Etxebarria',
-  },
-  {
-    id: 'to_h9', name: 'Copa Barcelona Febrero', description: 'Torneo mensual en Barcelona.',
-    date: '2026-02-08', time: '17:00', venueId: 'v2', venueName: 'Café Sport',
-    city: 'Barcelona', tableBrand: 'Tsunami', playStyle: 'movimiento',
-    format: 'eliminacion_simple', pairingMode: 'inscripcion', maxPairs: 12,
-    entryFee: 8, organizerId: 'u2', organizerName: 'Laura Martínez', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-01-20',
-    mvpPlayerId: 'u2', mvpPlayerName: 'Laura Martínez',
-  },
-  {
-    id: 'to_h10', name: 'Liga Gol Norte', description: 'Liga interna de Cervecería Gol Norte.',
-    date: '2026-01-25', time: '19:00', venueId: 'v6', venueName: 'Cervecería Gol Norte',
-    city: 'Madrid', tableBrand: 'Infinity', playStyle: 'parado',
     format: 'round_robin', pairingMode: 'inscripcion', maxPairs: 8,
-    entryFee: 5, organizerId: 'u6', organizerName: 'María Fernández', requiresApproval: false,
-    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-01-10',
+    organizerId: 'u1', organizerName: 'Carlos García', requiresApproval: false,
+    status: 'finalizado', hasCategories: false, categories: [], createdAt: '2026-01-20',
     mvpPlayerId: 'u6', mvpPlayerName: 'María Fernández',
   },
   {
@@ -1126,12 +1158,10 @@ export const MOCK_PAIRS: TournamentPair[] = [
   { id: 'p4', tournamentId: 'to1', goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 }, forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 }, seed: 4, status: 'inscrita' },
   { id: 'p5', tournamentId: 'to1', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 5, status: 'inscrita' },
   { id: 'p6', tournamentId: 'to1', goalkeeper: { userId: 'u2', displayName: 'Laura Martínez', elo: 1780 }, forward: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1680 }, seed: 6, status: 'inscrita' },
-  // Rey de la pista pairs
   { id: 'pk1', tournamentId: 'to4', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 }, seed: 1, status: 'confirmada' },
   { id: 'pk2', tournamentId: 'to4', goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 }, forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 }, seed: 2, status: 'confirmada' },
   { id: 'pk3', tournamentId: 'to4', goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 3, status: 'inscrita' },
   { id: 'pk4', tournamentId: 'to4', goalkeeper: { userId: 'u7', displayName: 'Javi Ruiz', elo: 1720 }, forward: { userId: 'u8', displayName: 'Elena Torres', elo: 1700 }, seed: 4, status: 'inscrita' },
-  // Grupos + Cuadro pairs (to5)
   { id: 'pg1', tournamentId: 'to5', goalkeeper: { userId: 'u1', displayName: 'Carlos García', elo: 1900 }, forward: { userId: 'u4', displayName: 'Ana López', elo: 1800 }, seed: 1, status: 'confirmada' },
   { id: 'pg2', tournamentId: 'to5', goalkeeper: { userId: 'u3', displayName: 'Mikel Etxebarria', elo: 1830 }, forward: { userId: 'u2', displayName: 'Laura Martínez', elo: 1860 }, seed: 2, status: 'confirmada' },
   { id: 'pg3', tournamentId: 'to5', goalkeeper: { userId: 'u5', displayName: 'Pedro Sánchez', elo: 1740 }, forward: { userId: 'u6', displayName: 'María Fernández', elo: 1750 }, seed: 3, status: 'confirmada' },
@@ -1152,7 +1182,6 @@ export const MOCK_RANKINGS: (PlayerRating & { displayName: string; city: string;
 ];
 
 // ===== PERSISTENCE LAYER =====
-// Apply saved overrides from localStorage on module load
 
 export function persistRankings() {
   localStorage.setItem(RANKINGS_OVERRIDES_KEY, JSON.stringify(MOCK_RANKINGS));
@@ -1176,7 +1205,6 @@ export function getEloKey(position: 'portero' | 'delantero', mode: 'parado' | 'm
 }
 
 export function recalcGeneralElo(ranking: typeof MOCK_RANKINGS[0]) {
-  // Ensure fields exist (migration from old data)
   if (ranking.goalkeeperStill == null) ranking.goalkeeperStill = ranking.asGoalkeeper || 1500;
   if (ranking.goalkeeperMoving == null) ranking.goalkeeperMoving = ranking.asGoalkeeper || 1500;
   if (ranking.forwardStill == null) ranking.forwardStill = ranking.asForward || 1500;
@@ -1187,7 +1215,7 @@ export function recalcGeneralElo(ranking: typeof MOCK_RANKINGS[0]) {
   ranking.general = Math.round((ranking.goalkeeperStill + ranking.goalkeeperMoving + ranking.forwardStill + ranking.forwardMoving) / 4);
 }
 
-// ===== CONTEXT STATS (mode & table performance tracking) =====
+// ===== CONTEXT STATS (mode & table performance tracking — stats only, no ELO effect) =====
 
 export interface ContextStats {
   byMode: Record<string, { matches: number; wins: number; losses: number }>;
@@ -1216,7 +1244,6 @@ export function recordContextStats(userId: string, mode: string, table: string, 
   if (!store[userId]) store[userId] = { byMode: {}, byTable: {} };
   const stats = store[userId];
 
-  // Mode
   if (!stats.byMode[mode]) stats.byMode[mode] = { matches: 0, wins: 0, losses: 0 };
   if (options?.revert) {
     stats.byMode[mode].matches = Math.max(0, stats.byMode[mode].matches - 1);
@@ -1228,7 +1255,6 @@ export function recordContextStats(userId: string, mode: string, table: string, 
     else stats.byMode[mode].losses++;
   }
 
-  // Table
   if (!stats.byTable[table]) stats.byTable[table] = { matches: 0, wins: 0, losses: 0 };
   if (options?.revert) {
     stats.byTable[table].matches = Math.max(0, stats.byTable[table].matches - 1);
@@ -1243,69 +1269,16 @@ export function recordContextStats(userId: string, mode: string, table: string, 
   saveContextStatsStore(store);
 }
 
-/**
- * Contextual coefficient (0.85 – 1.15) based on whether the player is in their best/worst context.
- * - Best mode/table: ganar da menos, perder penaliza más → coefficient > 1 for losses, < 1 for wins? 
- * Actually per the spec:
- *   best context: win gives less, loss penalizes more → for wins coeff < 1, for losses coeff > 1
- *   worst context: win gives more, loss penalizes less → for wins coeff > 1, for losses coeff < 1
- * 
- * We compute a "familiarity" score from winrate and return a coefficient.
- */
-export function getContextualCoefficient(userId: string, mode: string, table: string, isWin: boolean): number {
-  const stats = getContextStats(userId);
-  
-  // Calculate mode familiarity
-  const modeStats = stats.byMode[mode];
-  const allModeMatches = Object.values(stats.byMode).reduce((s, m) => s + m.matches, 0);
-  const globalModeWinRate = allModeMatches > 0 
-    ? Object.values(stats.byMode).reduce((s, m) => s + m.wins, 0) / allModeMatches 
-    : 0.5;
-  const modeWinRate = modeStats && modeStats.matches >= 3 
-    ? modeStats.wins / modeStats.matches 
-    : globalModeWinRate;
-  const modeDiff = modeStats && modeStats.matches >= 3 ? modeWinRate - globalModeWinRate : 0;
-
-  // Calculate table familiarity
-  const tableStats = stats.byTable[table];
-  const allTableMatches = Object.values(stats.byTable).reduce((s, m) => s + m.matches, 0);
-  const globalTableWinRate = allTableMatches > 0 
-    ? Object.values(stats.byTable).reduce((s, m) => s + m.wins, 0) / allTableMatches 
-    : 0.5;
-  const tableWinRate = tableStats && tableStats.matches >= 3 
-    ? tableStats.wins / tableStats.matches 
-    : globalTableWinRate;
-  const tableDiff = tableStats && tableStats.matches >= 3 ? tableWinRate - globalTableWinRate : 0;
-
-  // Combined advantage: positive = player is in a strong context
-  const advantage = (modeDiff + tableDiff) / 2; // range roughly -0.5 to +0.5
-
-  // Scale to coefficient range 0.85 – 1.15
-  // In strong context (advantage > 0): wins give less (coeff < 1), losses penalize more (coeff > 1)
-  // In weak context (advantage < 0): wins give more (coeff > 1), losses penalize less (coeff < 1)
-  const scaledAdvantage = Math.max(-0.15, Math.min(0.15, advantage * 0.5));
-  
-  if (isWin) {
-    return 1 - scaledAdvantage; // strong context → less reward
-  } else {
-    return 1 + scaledAdvantage; // strong context → more penalty
-  }
+// Contextual coefficient — DEPRECATED, always returns 1.0 (no contextual ELO adjustments)
+export function getContextualCoefficient(_userId: string, _mode: string, _table: string, _isWin: boolean): number {
+  return 1.0;
 }
 
-// Sanitize adjustment values (legacy, just clamp for backwards compat)
 function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
-  if (ranking.byStyle) {
-    for (const key of Object.keys(ranking.byStyle) as Array<keyof typeof ranking.byStyle>) {
-      const v = ranking.byStyle[key] || 0;
-      ranking.byStyle[key] = Math.max(-180, Math.min(180, v));
-    }
-  }
-  // Migrate old data: ensure 4 specific ELOs exist
   if (ranking.goalkeeperStill == null) ranking.goalkeeperStill = ranking.asGoalkeeper || 1500;
   if (ranking.goalkeeperMoving == null) ranking.goalkeeperMoving = ranking.asGoalkeeper || 1500;
   if (ranking.forwardStill == null) ranking.forwardStill = ranking.asForward || 1500;
   if (ranking.forwardMoving == null) ranking.forwardMoving = ranking.asForward || 1500;
-  // Recalculate derived values
   recalcGeneralElo(ranking);
 }
 
@@ -1328,7 +1301,6 @@ try {
   }
 } catch {}
 
-// Also sanitize the hardcoded mock data
 MOCK_RANKINGS.forEach(sanitizeAdjustments);
 
 // Restore tournament overrides
@@ -1355,506 +1327,48 @@ try {
   if (savedPairs) {
     const parsed = JSON.parse(savedPairs);
     if (Array.isArray(parsed)) {
-      // Replace entire pairs array content
-      MOCK_PAIRS.length = 0;
-      parsed.forEach((p: TournamentPair) => MOCK_PAIRS.push(p));
+      parsed.forEach((saved: TournamentPair) => {
+        const idx = MOCK_PAIRS.findIndex(p => p.id === saved.id);
+        if (idx >= 0) {
+          Object.assign(MOCK_PAIRS[idx], saved);
+        } else {
+          MOCK_PAIRS.push(saved);
+        }
+      });
     }
   }
 } catch {}
 
-export const MOCK_TEAMS: Team[] = [
-  { id: 'team1', name: 'Madrid Futbolín Club', city: 'Madrid', captainId: 'u1', elo: 1820, description: 'El equipo de referencia en Madrid', createdAt: '2025-01-01' },
-  { id: 'team2', name: 'BCN Foosballers', city: 'Barcelona', captainId: 'u2', elo: 1790, description: 'Pasión por el futbolín en Barcelona', createdAt: '2025-02-15' },
-  { id: 'team3', name: 'Euskal Kicker', city: 'Bilbao', captainId: 'u3', elo: 1760, description: 'Fuerza vasca en la mesa', createdAt: '2025-03-01' },
-];
+// ===== TABLE PERFORMANCE =====
 
-export function getTableForVenue(venueId: string): VenueTable | undefined {
-  return MOCK_TABLES.find(t => t.venueId === venueId);
-}
-
-export const TABLE_BRAND_COLORS: Record<string, string> = {
-  Presas: '#2563eb', Tsunami: '#0891b2', Infinity: '#7c3aed', Val: '#059669',
-  Garlando: '#dc2626', Leonhart: '#ca8a04', Tornado: '#ea580c', Otro: '#6b7280',
-};
-
-export const TABLE_BRAND_SHORT: Record<string, string> = {
-  Presas: 'PRE', Tsunami: 'TSU', Infinity: 'INF', Val: 'VAL',
-  Garlando: 'GAR', Leonhart: 'LEO', Tornado: 'TOR', Otro: '?',
-};
-
-export const TABLE_CONDITION_LABELS: Record<string, string> = {
-  perfecta: 'Perfecta', buen_estado: 'Buen estado', estado_normal: 'Estado normal',
-  deteriorada: 'Deteriorada', fuera_de_servicio: 'Fuera de servicio',
-};
-
-export const TABLE_CONDITION_COLORS: Record<string, string> = {
-  perfecta: 'bg-success text-success-foreground', buen_estado: 'bg-primary/10 text-primary',
-  estado_normal: 'bg-muted text-muted-foreground', deteriorada: 'bg-warning/20 text-warning-foreground',
-  fuera_de_servicio: 'bg-destructive/10 text-destructive',
-};
-
-export function searchPlayers(query: string) {
-  if (!query || query.trim().length < 2) return [];
-  const q = query.toLowerCase();
-  return MOCK_RANKINGS.filter(r => r.displayName.toLowerCase().includes(q));
-}
-
-export function findOrCreatePlayer(displayName: string, city: string = '', position?: Position): { userId: string; displayName: string; elo: number; playerType: PlayerType } {
-  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
-  if (existing) {
-    let elo = existing.general;
-    if (position === 'portero') elo = existing.asGoalkeeper;
-    else if (position === 'delantero') elo = existing.asForward;
-    return { userId: existing.userId, displayName: existing.displayName, elo, playerType: existing.playerType || 'registrado' };
-  }
-  const guests = getGuestPlayers();
-  const existingGuest = guests.find(g => g.displayName.toLowerCase() === displayName.toLowerCase());
-  if (existingGuest) return { userId: existingGuest.id, displayName: existingGuest.displayName, elo: 1500, playerType: 'invitado' };
-  const guest = createGuestPlayer(displayName);
-  return { userId: guest.id, displayName: guest.displayName, elo: 1500, playerType: 'invitado' };
-}
-
-export function findOrCreateRegisteredPlayer(displayName: string, city: string = '', position?: Position): { userId: string; displayName: string; elo: number; playerType: PlayerType } {
-  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
-  if (existing) {
-    let elo = existing.general;
-    if (position === 'portero') elo = existing.asGoalkeeper;
-    else if (position === 'delantero') elo = existing.asForward;
-    return { userId: existing.userId, displayName: existing.displayName, elo, playerType: existing.playerType || 'registrado' };
-  }
-  const BASE_ELO = 1500;
-  const newUserId = `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  MOCK_RANKINGS.push({
-    userId: newUserId, displayName, city,
-    general: BASE_ELO, asGoalkeeper: BASE_ELO, asForward: BASE_ELO,
-    goalkeeperStill: BASE_ELO, goalkeeperMoving: BASE_ELO, forwardStill: BASE_ELO, forwardMoving: BASE_ELO,
-    byTable: {}, byStyle: { parado: 0, movimiento: 0 },
-    wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
-    mvpCount: 0, currentStreak: 0, bestStreak: 0, playerType: 'registrado',
-  });
-  persistRankings();
-  return { userId: newUserId, displayName, elo: BASE_ELO, playerType: 'registrado' };
-}
-
-export function getFrequentPartners(userId: string): { partnerId: string; partnerName: string; count: number }[] {
-  const partnerMap: Record<string, { name: string; count: number }> = {};
-  MOCK_PAIRS.forEach(pair => {
-    if (pair.goalkeeper.userId === userId && pair.forward.userId !== userId) {
-      const key = pair.forward.userId;
-      if (!partnerMap[key]) partnerMap[key] = { name: pair.forward.displayName, count: 0 };
-      partnerMap[key].count++;
-    }
-    if (pair.forward.userId === userId && pair.goalkeeper.userId !== userId) {
-      const key = pair.goalkeeper.userId;
-      if (!partnerMap[key]) partnerMap[key] = { name: pair.goalkeeper.displayName, count: 0 };
-      partnerMap[key].count++;
-    }
-  });
-  return Object.entries(partnerMap).map(([partnerId, data]) => ({ partnerId, partnerName: data.name, count: data.count })).sort((a, b) => b.count - a.count);
-}
-
-// ===== INDIVIDUAL ENROLLMENTS (for equilibradas/random) =====
-
-const INDIVIDUAL_ENROLLMENTS_KEY = 'futbolines_individual_enrollments';
-
-export function getIndividualEnrollments(tournamentId: string): IndividualEnrollment[] {
-  try {
-    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
-    return all.filter(e => e.tournamentId === tournamentId);
-  } catch { return []; }
-}
-
-export function addIndividualEnrollment(enrollment: IndividualEnrollment) {
-  try {
-    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
-    if (all.some(e => e.tournamentId === enrollment.tournamentId && e.userId === enrollment.userId)) return;
-    all.push(enrollment);
-    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(all));
-  } catch {}
-}
-
-export function removeIndividualEnrollment(tournamentId: string, userId: string) {
-  try {
-    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
-    const filtered = all.filter(e => !(e.tournamentId === tournamentId && e.userId === userId));
-    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(filtered));
-  } catch {}
-}
-
-export function generateBalancedPairs(tournamentId: string): TournamentPair[] {
-  const enrollments = getIndividualEnrollments(tournamentId);
-  if (enrollments.length < 2 || enrollments.length % 2 !== 0) return [];
-
-  // Sort by ELO descending
-  const sorted = [...enrollments].sort((a, b) => b.elo - a.elo);
-  const pairs: TournamentPair[] = [];
-
-  // Pair strongest with weakest for balance
-  const half = sorted.length / 2;
-  for (let i = 0; i < half; i++) {
-    const strong = sorted[i];
-    const weak = sorted[sorted.length - 1 - i];
-
-    // Assign positions: respect preferences when possible
-    let goalkeeper = strong;
-    let forward = weak;
-
-    if (strong.preferredPosition === 'delantero' && weak.preferredPosition === 'portero') {
-      goalkeeper = weak;
-      forward = strong;
-    } else if (strong.preferredPosition === 'portero' || weak.preferredPosition === 'delantero') {
-      goalkeeper = strong;
-      forward = weak;
-    } else if (weak.preferredPosition === 'portero' || strong.preferredPosition === 'delantero') {
-      goalkeeper = weak;
-      forward = strong;
-    }
-
-    pairs.push({
-      id: `p_gen_${Date.now()}_${i}`,
-      tournamentId,
-      goalkeeper: {
-        userId: goalkeeper.userId,
-        displayName: goalkeeper.displayName,
-        elo: goalkeeper.elo,
-        playerType: goalkeeper.playerType,
-      },
-      forward: {
-        userId: forward.userId,
-        displayName: forward.displayName,
-        elo: forward.elo,
-        playerType: forward.playerType,
-      },
-      seed: i + 1,
-      status: 'inscrita',
-    });
-  }
-
-  return pairs;
-}
-
-export function generateRandomPairs(tournamentId: string): TournamentPair[] {
-  const enrollments = getIndividualEnrollments(tournamentId);
-  if (enrollments.length < 2 || enrollments.length % 2 !== 0) return [];
-
-  // Shuffle
-  const shuffled = [...enrollments];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  const pairs: TournamentPair[] = [];
-  for (let i = 0; i < shuffled.length; i += 2) {
-    const a = shuffled[i];
-    const b = shuffled[i + 1];
-
-    let goalkeeper = a;
-    let forward = b;
-
-    if (a.preferredPosition === 'delantero' && b.preferredPosition === 'portero') {
-      goalkeeper = b;
-      forward = a;
-    } else if (b.preferredPosition === 'portero') {
-      goalkeeper = b;
-      forward = a;
-    }
-
-    pairs.push({
-      id: `p_gen_${Date.now()}_${i / 2}`,
-      tournamentId,
-      goalkeeper: {
-        userId: goalkeeper.userId,
-        displayName: goalkeeper.displayName,
-        elo: goalkeeper.elo,
-        playerType: goalkeeper.playerType,
-      },
-      forward: {
-        userId: forward.userId,
-        displayName: forward.displayName,
-        elo: forward.elo,
-        playerType: forward.playerType,
-      },
-      seed: (i / 2) + 1,
-      status: 'inscrita',
-    });
-  }
-
-  return pairs;
-}
-
-export function confirmGeneratedPairs(tournamentId: string, pairs: TournamentPair[]) {
-  pairs.forEach(p => MOCK_PAIRS.push(p));
-  // Change tournament status to en_curso so bracket can start
-  const tournament = MOCK_TOURNAMENTS.find(t => t.id === tournamentId);
-  if (tournament && tournament.status === 'abierto') {
-    tournament.status = 'en_curso';
-    persistTournaments();
-  }
-  persistPairs();
-}
-
-// Fix inconsistent teams: ensure captain is always a member
-export function fixTeamMemberConsistency() {
-  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
-  allTeams.forEach(team => {
-    const members = getTeamMembers(team.id);
-    const captainIsMember = members.some(m => m.userId === team.captainId);
-    if (!captainIsMember && team.captainId) {
-      // Find captain display name from rankings or registered users
-      const ranking = MOCK_RANKINGS.find(r => r.userId === team.captainId);
-      const regUsers = getRegisteredUsers();
-      const regUser = regUsers.find(u => u.id === team.captainId);
-      const displayName = ranking?.displayName || regUser?.displayName || 'Capitán';
-      addTeamMember({
-        id: `tm_fix_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-        teamId: team.id,
-        userId: team.captainId,
-        displayName,
-        role: 'capitan',
-        joinedAt: team.createdAt,
-        status: 'aceptada',
-      });
-    }
-  });
-}
-
-// ===== TEAM MATCHES & LEAGUES =====
-
-const TEAM_MATCHES_KEY = 'futbolines_team_matches';
-const TEAM_LEAGUES_KEY = 'futbolines_team_leagues';
-
-export function getTeamMatches(): TeamMatch[] {
-  try { return JSON.parse(localStorage.getItem(TEAM_MATCHES_KEY) || '[]'); } catch { return []; }
-}
-
-function saveTeamMatches(matches: TeamMatch[]) {
-  localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
-}
-
-export function getTeamMatchesForTeam(teamId: string): TeamMatch[] {
-  return getTeamMatches().filter(m => m.team1Id === teamId || m.team2Id === teamId);
-}
-
-export function createTeamMatch(team1Id: string, team2Id: string, pairingsCount: number, leagueId?: string, matchday?: number): TeamMatch {
-  const pairings: TeamMatchPairing[] = Array.from({ length: pairingsCount }, (_, i) => ({
-    id: `tmp_${Date.now()}_${i}`,
-    teamMatchId: '',
-    pair1GoalkeeperName: '',
-    pair1ForwardName: '',
-    pair2GoalkeeperName: '',
-    pair2ForwardName: '',
-  }));
-  const match: TeamMatch = {
-    id: `tmatch_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-    team1Id, team2Id, leagueId, matchday,
-    pairings,
-    status: 'pendiente',
-    date: new Date().toISOString().split('T')[0],
-  };
-  match.pairings.forEach(p => p.teamMatchId = match.id);
-  const all = getTeamMatches();
-  all.push(match);
-  saveTeamMatches(all);
-  return match;
-}
-
-export function updateTeamMatchPairing(matchId: string, pairingId: string, updates: Partial<TeamMatchPairing>) {
-  const all = getTeamMatches();
-  const match = all.find(m => m.id === matchId);
-  if (!match) return;
-  const pairing = match.pairings.find(p => p.id === pairingId);
-  if (pairing) Object.assign(pairing, updates);
-  saveTeamMatches(all);
-}
-
-export function finalizeTeamMatch(matchId: string) {
-  const all = getTeamMatches();
-  const match = all.find(m => m.id === matchId);
-  if (!match) return;
-
-  let team1Wins = 0, team2Wins = 0;
-  match.pairings.forEach(p => {
-    if (p.score1 != null && p.score2 != null) {
-      if (p.score1 > p.score2) { p.winnerId = 'team1'; team1Wins++; }
-      else if (p.score2 > p.score1) { p.winnerId = 'team2'; team2Wins++; }
-    }
-  });
-
-  match.winnerId = team1Wins > team2Wins ? match.team1Id : team2Wins > team1Wins ? match.team2Id : undefined;
-  match.status = 'finalizado';
-  saveTeamMatches(all);
-
-  // Update team stats
-  if (match.winnerId) {
-    const loserId = match.winnerId === match.team1Id ? match.team2Id : match.team1Id;
-    const winnerStats = getTeamStats(match.winnerId);
-    updateTeamStats(match.winnerId, { matchesPlayed: winnerStats.matchesPlayed + 1, wins: winnerStats.wins + 1 });
-    const loserStats = getTeamStats(loserId);
-    updateTeamStats(loserId, { matchesPlayed: loserStats.matchesPlayed + 1, losses: loserStats.losses + 1 });
-  }
-}
-
-// ===== TEAM LEAGUES =====
-
-export function getTeamLeagues(): TeamLeague[] {
-  try { return JSON.parse(localStorage.getItem(TEAM_LEAGUES_KEY) || '[]'); } catch { return []; }
-}
-
-function saveTeamLeagues(leagues: TeamLeague[]) {
-  localStorage.setItem(TEAM_LEAGUES_KEY, JSON.stringify(leagues));
-}
-
-export function createTeamLeague(name: string, teamIds: string[], pairingsPerMatch: number = 3, season?: string): TeamLeague {
-  const league: TeamLeague = {
-    id: `tleague_${Date.now()}`,
-    name, season, teamIds, pairingsPerMatch,
-    status: 'activa',
-    createdAt: new Date().toISOString().split('T')[0],
-  };
-  const all = getTeamLeagues();
-  all.push(league);
-  saveTeamLeagues(all);
-  return league;
-}
-
-export function generateLeagueMatchdays(leagueId: string) {
-  const leagues = getTeamLeagues();
-  const league = leagues.find(l => l.id === leagueId);
-  if (!league) return;
-
-  const teams = [...league.teamIds];
-  if (teams.length < 2) return;
-
-  // Round-robin schedule
-  const n = teams.length;
-  const rounds = n % 2 === 0 ? n - 1 : n;
-  const list = [...teams];
-  if (n % 2 !== 0) list.push('BYE');
-
-  const half = list.length / 2;
-  for (let round = 0; round < rounds; round++) {
-    for (let i = 0; i < half; i++) {
-      const home = list[i];
-      const away = list[list.length - 1 - i];
-      if (home === 'BYE' || away === 'BYE') continue;
-      createTeamMatch(home, away, league.pairingsPerMatch, leagueId, round + 1);
-    }
-    // Rotate (keep first fixed)
-    list.splice(1, 0, list.pop()!);
-  }
-}
-
-export function getTeamLeagueStandings(leagueId: string): TeamLeagueStanding[] {
-  const leagues = getTeamLeagues();
-  const league = leagues.find(l => l.id === leagueId);
-  if (!league) return [];
-
-  const matches = getTeamMatches().filter(m => m.leagueId === leagueId && m.status === 'finalizado');
-  const standingsMap: Record<string, TeamLeagueStanding> = {};
-
-  league.teamIds.forEach(id => {
-    standingsMap[id] = { teamId: id, played: 0, wins: 0, losses: 0, points: 0, pairingDiff: 0 };
-  });
-
-  matches.forEach(m => {
-    let t1PairWins = 0, t2PairWins = 0;
-    m.pairings.forEach(p => {
-      if (p.winnerId === 'team1') t1PairWins++;
-      else if (p.winnerId === 'team2') t2PairWins++;
-    });
-
-    if (standingsMap[m.team1Id]) {
-      standingsMap[m.team1Id].played++;
-      standingsMap[m.team1Id].pairingDiff += t1PairWins - t2PairWins;
-      if (m.winnerId === m.team1Id) { standingsMap[m.team1Id].wins++; standingsMap[m.team1Id].points += 3; }
-      else if (m.winnerId) standingsMap[m.team1Id].losses++;
-    }
-    if (standingsMap[m.team2Id]) {
-      standingsMap[m.team2Id].played++;
-      standingsMap[m.team2Id].pairingDiff += t2PairWins - t1PairWins;
-      if (m.winnerId === m.team2Id) { standingsMap[m.team2Id].wins++; standingsMap[m.team2Id].points += 3; }
-      else if (m.winnerId) standingsMap[m.team2Id].losses++;
-    }
-  });
-
-  return Object.values(standingsMap).sort((a, b) => b.points - a.points || b.pairingDiff - a.pairingDiff);
-}
-
-export function getTeamRanking(): (Team & { stats: TeamStats; winrate: number })[] {
-  return [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))]
-    .map(team => {
-      const stats = getTeamStats(team.id);
-      const winrate = stats.matchesPlayed > 0 ? Math.round((stats.wins / stats.matchesPlayed) * 100) : 0;
-      return { ...team, stats, winrate };
-    })
-    .sort((a, b) => b.stats.wins - a.stats.wins || b.winrate - a.winrate || b.elo - a.elo);
-}
-
-// ===== TEAM JOIN REQUESTS =====
-
-export interface TeamJoinRequest {
-  id: string;
-  teamId: string;
+export interface TablePerformance {
   userId: string;
-  displayName: string;
-  status: 'pendiente' | 'aceptada' | 'rechazada';
-  createdAt: string;
+  tableBrand: TableBrand;
+  matches: number;
+  wins: number;
+  losses: number;
 }
 
-export function getTeamJoinRequests(teamId: string): TeamJoinRequest[] {
+export function getTablePerformance(userId: string): TablePerformance[] {
   try {
-    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
-    return all.filter(r => r.teamId === teamId);
+    const all: TablePerformance[] = JSON.parse(localStorage.getItem(TABLE_PERFORMANCE_KEY) || '[]');
+    return all.filter(tp => tp.userId === userId);
   } catch { return []; }
 }
 
-export function createJoinRequest(teamId: string, userId: string, displayName: string): { success: boolean; error?: string } {
+export function updateTablePerformance(userId: string, tableBrand: TableBrand, won: boolean) {
+  if (isGuestPlayer(userId)) return;
   try {
-    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
-    if (all.some(r => r.teamId === teamId && r.userId === userId && r.status === 'pendiente')) {
-      return { success: false, error: 'Ya tienes una solicitud pendiente' };
+    const all: TablePerformance[] = JSON.parse(localStorage.getItem(TABLE_PERFORMANCE_KEY) || '[]');
+    let existing = all.find(tp => tp.userId === userId && tp.tableBrand === tableBrand);
+    if (!existing) {
+      existing = { userId, tableBrand, matches: 0, wins: 0, losses: 0 };
+      all.push(existing);
     }
-    const members = getTeamMembers(teamId);
-    if (members.some(m => m.userId === userId)) {
-      return { success: false, error: 'Ya eres miembro de este equipo' };
-    }
-    // Check if already in another team
-    const existingTeam = getUserTeam(userId);
-    if (existingTeam && existingTeam.id !== teamId) {
-      return { success: false, error: `Ya perteneces al equipo "${existingTeam.name}". Debes abandonarlo primero.` };
-    }
-    all.push({
-      id: `jr_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      teamId, userId, displayName, status: 'pendiente',
-      createdAt: new Date().toISOString(),
-    });
-    localStorage.setItem('futbolines_join_requests', JSON.stringify(all));
-    const team = [...MOCK_TEAMS, ...getStoredTeams()].find(t => t.id === teamId);
-    if (team) {
-      addNotification({ userId: team.captainId, type: 'team_invite', title: 'Solicitud de equipo', body: `${displayName} quiere unirse a ${team.name}` });
-    }
-    return { success: true };
-  } catch { return { success: false, error: 'Error interno' }; }
-}
-
-export function respondJoinRequest(requestId: string, accept: boolean) {
-  try {
-    const all: TeamJoinRequest[] = JSON.parse(localStorage.getItem('futbolines_join_requests') || '[]');
-    const req = all.find(r => r.id === requestId);
-    if (!req) return;
-    req.status = accept ? 'aceptada' : 'rechazada';
-    localStorage.setItem('futbolines_join_requests', JSON.stringify(all));
-    if (accept) {
-      addTeamMember({
-        id: `tm_${Date.now()}`, teamId: req.teamId, userId: req.userId,
-        displayName: req.displayName, role: 'jugador',
-        joinedAt: new Date().toISOString().split('T')[0], status: 'aceptada',
-      });
-      addNotification({ userId: req.userId, type: 'general', title: 'Solicitud aceptada', body: 'Tu solicitud para unirte al equipo ha sido aceptada' });
-    } else {
-      addNotification({ userId: req.userId, type: 'general', title: 'Solicitud rechazada', body: 'Tu solicitud ha sido rechazada' });
-    }
+    existing.matches++;
+    if (won) existing.wins++;
+    else existing.losses++;
+    localStorage.setItem(TABLE_PERFORMANCE_KEY, JSON.stringify(all));
   } catch {}
 }
 
@@ -1884,6 +1398,8 @@ export function recordEloHistory(userId: string, elo: number, event?: string, po
   } catch {}
 }
 
+// ensureEloHistory: only creates a single registration point at the user's actual creation date
+// Does NOT fabricate historical data
 export function ensureEloHistory(userId: string) {
   try {
     const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
@@ -1897,11 +1413,18 @@ export function ensureEloHistory(userId: string) {
     const regUser = regUsers.find(u => u.id === userId);
     const registrationDate = regUser?.createdAt ? new Date(regUser.createdAt).toISOString() : new Date().toISOString();
     
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero_parado', event: 'Registro' });
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero_movimiento', event: 'Registro' });
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero_parado', event: 'Registro' });
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero_movimiento', event: 'Registro' });
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'general', event: 'Registro' });
+    // Only add a single registration point per ELO type — no fake history
+    const currentGeneral = ranking.general;
+    const currentGkStill = ranking.goalkeeperStill ?? 1500;
+    const currentGkMoving = ranking.goalkeeperMoving ?? 1500;
+    const currentFwStill = ranking.forwardStill ?? 1500;
+    const currentFwMoving = ranking.forwardMoving ?? 1500;
+
+    all.push({ userId, elo: currentGeneral, date: registrationDate, position: 'general', event: 'Registro' });
+    all.push({ userId, elo: currentGkStill, date: registrationDate, position: 'portero_parado', event: 'Registro' });
+    all.push({ userId, elo: currentGkMoving, date: registrationDate, position: 'portero_movimiento', event: 'Registro' });
+    all.push({ userId, elo: currentFwStill, date: registrationDate, position: 'delantero_parado', event: 'Registro' });
+    all.push({ userId, elo: currentFwMoving, date: registrationDate, position: 'delantero_movimiento', event: 'Registro' });
 
     localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
   } catch {}
@@ -1947,76 +1470,132 @@ export interface Rivalry {
 export function getPlayerRivalries(userId: string): Rivalry[] {
   const opponents: Record<string, { name: string; encounters: number; wins: number; losses: number }> = {};
   
-  // Track via bracket matches - check which pairs the user was on and who they played against
-  MOCK_TOURNAMENTS.forEach(tournament => {
-    const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
-    const userPairIds = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId).map(p => p.id);
+  MOCK_PAIRS.forEach(pair => {
+    const isGk = pair.goalkeeper.userId === userId;
+    const isFw = pair.forward.userId === userId;
+    if (!isGk && !isFw) return;
     
-    if (userPairIds.length === 0) return;
-    
-    // Count encounters: each time user's pair appears in same tournament as opponent
-    tPairs.forEach(oppPair => {
-      if (userPairIds.includes(oppPair.id)) return; // skip own pairs
-      [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
-        if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
+    const sameT = MOCK_PAIRS.filter(p => p.tournamentId === pair.tournamentId && p.id !== pair.id);
+    sameT.forEach(opPair => {
+      [opPair.goalkeeper, opPair.forward].forEach(opp => {
+        if (opp.userId === userId) return;
         if (!opponents[opp.userId]) opponents[opp.userId] = { name: opp.displayName, encounters: 0, wins: 0, losses: 0 };
-        opponents[opp.userId].encounters++;
       });
     });
   });
-
-  // Calculate wins/losses from activity log
-  // For each rival, estimate from pair history context
-  // Use the pair-level encounter data: user's pairs vs opponent's pairs
-  MOCK_TOURNAMENTS.forEach(tournament => {
-    const tPairs = MOCK_PAIRS.filter(p => p.tournamentId === tournament.id);
-    const userPairs = tPairs.filter(p => p.goalkeeper.userId === userId || p.forward.userId === userId);
-    
-    userPairs.forEach(myPair => {
-      // If my pair is 'ganadora', I won against everyone; if 'eliminada' someone beat me
-      if (myPair.status === 'ganadora') {
-        tPairs.forEach(oppPair => {
-          if (oppPair.id === myPair.id) return;
-          [oppPair.goalkeeper, oppPair.forward].forEach(opp => {
-            if (opp.userId === userId || isGuestPlayer(opp.userId)) return;
-            if (opponents[opp.userId]) opponents[opp.userId].wins++;
-          });
-        });
-      }
-    });
-  });
-
+  
   return Object.entries(opponents)
-    .map(([opponentId, data]) => ({ opponentId, opponentName: data.name, encounters: data.encounters, wins: data.wins, losses: Math.max(0, data.encounters - data.wins) }))
-    .filter(r => r.encounters >= 2)
+    .filter(([_, data]) => data.encounters > 0)
+    .map(([opponentId, data]) => ({ opponentId, opponentName: data.name, ...data }))
     .sort((a, b) => b.encounters - a.encounters)
     .slice(0, 5);
 }
 
-// ===== USER TEAM HELPERS =====
+// ===== TEAM MATCHES =====
 
-export function getUserTeam(userId: string): Team | null {
-  const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
-  const captainTeam = allTeams.find(t => t.captainId === userId);
-  if (captainTeam) return captainTeam;
-  try {
-    const allMembers: TeamMember[] = JSON.parse(localStorage.getItem('futbolines_team_members') || '[]');
-    const membership = allMembers.find(m => m.userId === userId && m.status === 'aceptada');
-    if (membership) return allTeams.find(t => t.id === membership.teamId) || null;
-  } catch {}
-  return null;
+const TEAM_MATCHES_KEY = 'futbolines_team_matches';
+
+export function getTeamMatches(): TeamMatch[] {
+  try { return JSON.parse(localStorage.getItem(TEAM_MATCHES_KEY) || '[]'); } catch { return []; }
 }
 
-export function getUserPendingInvites(userId: string): { id: string; teamId: string; teamName: string; displayName: string }[] {
+export function saveTeamMatch(match: TeamMatch) {
+  const matches = getTeamMatches();
+  matches.push(match);
+  localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
+}
+
+export function updateTeamMatch(matchId: string, updates: Partial<TeamMatch>) {
+  const matches = getTeamMatches();
+  const idx = matches.findIndex(m => m.id === matchId);
+  if (idx >= 0) {
+    matches[idx] = { ...matches[idx], ...updates };
+    localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
+  }
+}
+
+// ===== TEAM LEAGUES =====
+
+const TEAM_LEAGUES_KEY = 'futbolines_team_leagues';
+
+export function getTeamLeagues(): TeamLeague[] {
+  try { return JSON.parse(localStorage.getItem(TEAM_LEAGUES_KEY) || '[]'); } catch { return []; }
+}
+
+export function saveTeamLeague(league: TeamLeague) {
+  const leagues = getTeamLeagues();
+  leagues.push(league);
+  localStorage.setItem(TEAM_LEAGUES_KEY, JSON.stringify(leagues));
+}
+
+export function updateTeamLeague(leagueId: string, updates: Partial<TeamLeague>) {
+  const leagues = getTeamLeagues();
+  const idx = leagues.findIndex(l => l.id === leagueId);
+  if (idx >= 0) {
+    leagues[idx] = { ...leagues[idx], ...updates };
+    localStorage.setItem(TEAM_LEAGUES_KEY, JSON.stringify(leagues));
+  }
+}
+
+export function getTeamLeagueStandings(leagueId: string): TeamLeagueStanding[] {
+  const matches = getTeamMatches().filter(m => m.leagueId === leagueId && m.status === 'finalizado');
+  const league = getTeamLeagues().find(l => l.id === leagueId);
+  if (!league) return [];
+  
+  const standings: Record<string, TeamLeagueStanding> = {};
+  league.teamIds.forEach(teamId => {
+    standings[teamId] = { teamId, played: 0, wins: 0, losses: 0, points: 0, pairingDiff: 0 };
+  });
+  
+  matches.forEach(match => {
+    if (!standings[match.team1Id] || !standings[match.team2Id]) return;
+    standings[match.team1Id].played++;
+    standings[match.team2Id].played++;
+    
+    const t1Wins = match.pairings.filter(p => p.winnerId === 'team1').length;
+    const t2Wins = match.pairings.filter(p => p.winnerId === 'team2').length;
+    
+    if (match.winnerId === match.team1Id) {
+      standings[match.team1Id].wins++;
+      standings[match.team1Id].points += 3;
+      standings[match.team2Id].losses++;
+    } else if (match.winnerId === match.team2Id) {
+      standings[match.team2Id].wins++;
+      standings[match.team2Id].points += 3;
+      standings[match.team1Id].losses++;
+    }
+    
+    standings[match.team1Id].pairingDiff += t1Wins - t2Wins;
+    standings[match.team2Id].pairingDiff += t2Wins - t1Wins;
+  });
+  
+  return Object.values(standings).sort((a, b) => b.points - a.points || b.pairingDiff - a.pairingDiff);
+}
+
+// ===== INDIVIDUAL ENROLLMENTS =====
+
+const INDIVIDUAL_ENROLLMENTS_KEY = 'futbolines_individual_enrollments';
+
+export function getIndividualEnrollments(tournamentId: string): IndividualEnrollment[] {
   try {
-    const allMembers: TeamMember[] = JSON.parse(localStorage.getItem('futbolines_team_members') || '[]');
-    const pending = allMembers.filter(m => m.userId === userId && m.status === 'pendiente');
-    const allTeams = [...MOCK_TEAMS, ...getStoredTeams().filter(t => !MOCK_TEAMS.some(m => m.id === t.id))];
-    return pending.map(m => ({
-      id: m.id,
-      teamId: m.teamId,
-      teamName: allTeams.find(t => t.id === m.teamId)?.name || 'Equipo',
-      displayName: m.displayName,
-    }));
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    return all.filter(e => e.tournamentId === tournamentId);
   } catch { return []; }
+}
+
+export function addIndividualEnrollment(enrollment: IndividualEnrollment) {
+  try {
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    if (all.some(e => e.tournamentId === enrollment.tournamentId && e.userId === enrollment.userId)) return;
+    all.push(enrollment);
+    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function removeIndividualEnrollment(tournamentId: string, usrId: string) {
+  try {
+    const all: IndividualEnrollment[] = JSON.parse(localStorage.getItem(INDIVIDUAL_ENROLLMENTS_KEY) || '[]');
+    const filtered = all.filter(e => !(e.tournamentId === tournamentId && e.userId === usrId));
+    localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(filtered));
+  } catch {}
 }
