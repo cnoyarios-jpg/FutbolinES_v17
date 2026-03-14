@@ -462,9 +462,10 @@ export default function TournamentDetailPage() {
       const appliedModeChange = nextModeAdjust - previousModeAdjust;
 
       const previousTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      const nextTableAdjust = clamp(previousTableAdjust + requestedTableChange, -90, 90);
-      ranking.byTable[tournament.tableBrand] = nextTableAdjust;
-      const appliedTableChange = nextTableAdjust - previousTableAdjust;
+      // Accumulate raw delta, then normalize for relative performance
+      ranking.byTable[tournament.tableBrand] = (ranking.byTable[tournament.tableBrand] || 0) + requestedTableChange;
+      normalizeTableAdjustments(ranking);
+      const appliedTableChange = (ranking.byTable[tournament.tableBrand] || 0) - previousTableAdjust;
 
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const appliedPositionChange = newElo - previousElo;
