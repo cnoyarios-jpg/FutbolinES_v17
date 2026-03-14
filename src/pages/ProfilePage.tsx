@@ -291,15 +291,26 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   <p className="text-[10px] text-muted-foreground leading-relaxed">
                     <span className="font-mono">0.6 × ELO posición + 0.4 × ELO general + ajuste modo + ajuste mesa</span>
                   </p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 italic">
+                    Ajustes son modificadores pequeños (modo ±180, mesa ±90), NO ratings completos. Cap total: ±120.
+                  </p>
                   <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
-                    <div className="rounded bg-muted px-2 py-1">
-                      <span className="text-muted-foreground">Portero efectivo: </span>
-                      <span className="font-bold">{Math.round(0.6 * rating.asGoalkeeper + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
-                    </div>
-                    <div className="rounded bg-muted px-2 py-1">
-                      <span className="text-muted-foreground">Delantero efectivo: </span>
-                      <span className="font-bold">{Math.round(0.6 * rating.asForward + 0.4 * rating.general + (rating.byStyle[rating.preferredStyle as 'parado' | 'movimiento'] || 0))}</span>
-                    </div>
+                    {(['parado', 'movimiento'] as const).map(style => (
+                      <div key={`eff-gk-${style}`} className="rounded bg-muted px-2 py-1">
+                        <span className="text-muted-foreground">Portero/{style}: </span>
+                        <span className="font-bold">
+                          {Math.round(0.6 * rating.asGoalkeeper + 0.4 * rating.general + Math.max(-120, Math.min(120, (rating.byStyle[style] || 0))))}
+                        </span>
+                      </div>
+                    ))}
+                    {(['parado', 'movimiento'] as const).map(style => (
+                      <div key={`eff-fw-${style}`} className="rounded bg-muted px-2 py-1">
+                        <span className="text-muted-foreground">Delantero/{style}: </span>
+                        <span className="font-bold">
+                          {Math.round(0.6 * rating.asForward + 0.4 * rating.general + Math.max(-120, Math.min(120, (rating.byStyle[style] || 0))))}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
