@@ -437,7 +437,7 @@ export default function TournamentDetailPage() {
           previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0, modeChange: 0, tableChange: 0, totalAppliedChange: 0,
+          generalChange: 0, modeChange: 0, tableChange: 0, tableRawDelta: 0, totalAppliedChange: 0,
           rawChange, multiplier: eloMultiplier,
           baseGeneralElo: context.generalElo, basePositionElo: context.positionElo,
           modeAdjust: context.modeAdjust, tableAdjust: context.tableAdjust,
