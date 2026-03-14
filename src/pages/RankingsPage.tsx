@@ -302,42 +302,46 @@ export default function RankingsPage() {
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {sorted.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No se encontraron jugadores con estos filtros.</p>
             )}
-            {sorted.map((player, i) => (
+            {sorted.map((player, i) => {
+              const elo = getElo(player);
+              const div = getDivision(elo);
+              const isTop3 = i < 3;
+              const medalColors = ['text-accent', 'text-muted-foreground', 'text-secondary'];
+              return (
               <Link key={player.userId} to={`/perfil/${player.userId}`}>
-                <div className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card hover:shadow-elevated transition-shadow">
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : i === 1 ? 'bg-muted text-muted-foreground' : i === 2 ? 'bg-secondary/20 text-secondary' : 'bg-muted text-muted-foreground'}`}>
+                <div className={`flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-all border border-border/30 ${isTop3 ? 'border-l-2 border-l-primary/40' : ''}`}>
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${isTop3 ? 'bg-primary/10 ' + medalColors[i] : 'bg-muted text-muted-foreground'}`}>
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold truncate">{player.displayName}</p>
-                    {(() => { const div = getDivision(getElo(player)); return (
-                        <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-bold border border-current/10 ${div.bgClass} ${div.colorClass}`}>
-                          <DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {div.sublevel}
-                        </span>
-                      ); })()}
+                      <p className="text-sm font-bold truncate">{player.displayName}</p>
+                      <span className={`inline-flex items-center gap-0.5 rounded-lg px-1.5 py-0.5 text-[9px] font-bold ${div.bgClass} ${div.colorClass}`}>
+                        <DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {div.sublevel}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-muted-foreground">{player.city}</p>
                       {player.preferredPosition && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary capitalize">{player.preferredPosition}</span>
+                        <span className="rounded-lg bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary capitalize">{player.preferredPosition}</span>
                       )}
                       {player.preferredTable && (
-                        <span className="rounded bg-secondary/10 px-1.5 py-0.5 text-[9px] font-semibold text-secondary">{player.preferredTable}</span>
+                        <span className="rounded-lg bg-secondary/8 px-1.5 py-0.5 text-[9px] font-bold text-secondary">{player.preferredTable}</span>
                       )}
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-display text-lg font-bold text-primary">{getElo(player)}</p>
-                    <p className="text-[10px] text-muted-foreground">{player.wins}V / {player.losses}D</p>
+                    <p className="font-display text-xl font-bold text-primary">{elo}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">{player.wins}V / {player.losses}D</p>
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
