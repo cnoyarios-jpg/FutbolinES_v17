@@ -48,10 +48,8 @@ interface EloChangeDisplay {
     previousGeneral: number;
     newGeneral: number;
     generalChange: number;
-    totalAppliedChange: number;
     rawChange: number;
     multiplier: number;
-    contextCoefficient: number;
     won: boolean;
   }[];
 }
