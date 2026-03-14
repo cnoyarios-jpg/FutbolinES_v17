@@ -179,5 +179,15 @@ export function calculateEffectiveRating(
   modeAdjust: number,
   tableAdjust: number
 ): number {
-  return Math.round(0.6 * positionElo + 0.4 * generalElo + modeAdjust + tableAdjust);
+  const safeModeAdjust = Number.isFinite(modeAdjust) ? modeAdjust : 0;
+  const safeTableAdjust = Number.isFinite(tableAdjust) ? tableAdjust : 0;
+
+  // Base real rating for this context (without specialization boosts)
+  const baseRating = 0.6 * positionElo + 0.4 * generalElo;
+
+  // Context can move expectation, but we cap artificial inflation/deflation.
+  const contextual = baseRating + safeModeAdjust + safeTableAdjust;
+  const contextualCap = 120;
+
+  return Math.round(Math.max(baseRating - contextualCap, Math.min(baseRating + contextualCap, contextual)));
 }
