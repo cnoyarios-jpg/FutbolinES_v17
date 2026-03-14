@@ -1858,7 +1858,7 @@ export interface EloHistoryEntry {
   elo: number;
   date: string;
   event?: string;
-  position?: 'general' | 'portero' | 'delantero';
+  position?: string;
 }
 
 export function getEloHistory(userId: string): EloHistoryEntry[] {
