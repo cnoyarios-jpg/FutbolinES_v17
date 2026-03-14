@@ -766,18 +766,17 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
 
       if (!hasGuestsInTournament) {
-        // MVP ELO bonus — only update position played, then recalc general as average
+        // MVP ELO bonus — update the specific position+mode ELO
         const mvpBonus = getTournamentMVPBonus(tournamentId);
         const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
         const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
+        const mvpMode = tournament.playStyle as 'parado' | 'movimiento';
+        const eloKey = getEloKey(mvpPosition, mvpMode);
 
-        if (mvpPosition === 'portero') ranking.asGoalkeeper += mvpBonus;
-        else ranking.asForward += mvpBonus;
+        ranking[eloKey] += mvpBonus;
+        recalcGeneralElo(ranking);
 
-        // General = always the average
-        ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-
-        recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
+        recordEloHistory(mvpUserId, ranking[eloKey], 'MVP: ' + tournament.name, `${mvpPosition}_${mvpMode}` as any);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
         addActivityEntry({ userId: mvpUserId, type: 'mvp', description: 'MVP en ' + tournament.name, eloChange: mvpBonus, date: new Date().toISOString() });
       }
