@@ -1300,6 +1300,13 @@ function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
       ranking.byStyle[key] = Math.max(-180, Math.min(180, v));
     }
   }
+  // Migrate old data: ensure 4 specific ELOs exist
+  if (ranking.goalkeeperStill == null) ranking.goalkeeperStill = ranking.asGoalkeeper || 1500;
+  if (ranking.goalkeeperMoving == null) ranking.goalkeeperMoving = ranking.asGoalkeeper || 1500;
+  if (ranking.forwardStill == null) ranking.forwardStill = ranking.asForward || 1500;
+  if (ranking.forwardMoving == null) ranking.forwardMoving = ranking.asForward || 1500;
+  // Recalculate derived values
+  recalcGeneralElo(ranking);
 }
 
 // Restore rankings overrides
