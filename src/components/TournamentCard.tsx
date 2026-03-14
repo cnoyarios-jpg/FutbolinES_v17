@@ -58,8 +58,8 @@ export default function TournamentCard({ tournament, onClick }: TournamentCardPr
             <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{tournament.city}</span>
             <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{tournament.maxPairs}</span>
             {(() => {
-              const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
-              if (registeredCount < 2) return null;
+              const { avgElo, count } = calculateTournamentAvgElo(tournament.id);
+              if (count < 2) return null;
               const div = getDivision(avgElo);
               return <span className={`flex items-center gap-1 font-bold ${div.colorClass}`}><DivisionIcon iconName={div.iconName} className="h-3 w-3" /> {avgElo}</span>;
             })()}

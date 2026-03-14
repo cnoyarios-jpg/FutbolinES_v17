@@ -938,8 +938,12 @@ export function getPlayerTieredAchievements(userId: string): PlayerTieredAchieve
   const playerProgress = store[userId] || {};
   return TIERED_ACHIEVEMENTS.map(achievement => {
     const progress = playerProgress[achievement.id] || 0;
-    const level = calculateLevel(achievement, progress);
-    return { ...achievement, currentProgress: progress, currentLevel: level };
+    const level = calculateLevel(progress, achievement.tiers);
+    const unlockedTiers: { level: number; unlockedAt: string }[] = [];
+    for (let i = 0; i < level; i++) {
+      unlockedTiers.push({ level: i + 1, unlockedAt: new Date().toISOString() });
+    }
+    return { achievementId: achievement.id, currentValue: progress, unlockedTiers };
   });
 }
 
