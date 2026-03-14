@@ -5,7 +5,7 @@ import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers,
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
-import { generateBracket, type BracketMatch, calculateEloChange, calculateEffectiveRating, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
+import { generateBracket, type BracketMatch, calculateEloChange, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
 import { toast } from 'sonner';
 
