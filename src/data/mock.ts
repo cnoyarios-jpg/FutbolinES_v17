@@ -32,6 +32,7 @@ const CORRECTIONS_KEY = 'futbolines_corrections';
 const RANKINGS_OVERRIDES_KEY = 'futbolines_rankings_overrides';
 const TOURNAMENTS_OVERRIDES_KEY = 'futbolines_tournaments_overrides';
 const PAIRS_OVERRIDES_KEY = 'futbolines_pairs_overrides';
+const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
 
 export function getRegisteredUsers(): RegisteredUser[] {
   try {
