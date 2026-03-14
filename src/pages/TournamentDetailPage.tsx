@@ -371,43 +371,20 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    const eloMultiplier = guestCount > 0 ? 0.25 : 1;
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-    const getPlayerContext = (userId: string, fallbackElo: number, position: 'portero' | 'delantero') => {
-      if (isGuestPlayer(userId)) {
-        return {
-          positionElo: 1500,
-          generalElo: 1500,
-          modeAdjust: 0,
-          tableAdjust: 0,
-          effectiveElo: 1500,
-        };
-      }
-
+    const getPlayerElo = (userId: string, fallbackElo: number, position: 'portero' | 'delantero') => {
+      if (isGuestPlayer(userId)) return 1500;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-      const positionElo = ranking ? (position === 'portero' ? ranking.asGoalkeeper : ranking.asForward) : fallbackElo;
-      const generalElo = ranking?.general ?? fallbackElo;
-      const modeAdjust = ranking?.byStyle?.[tournament.playStyle] ?? 0;
-      const tableAdjust = ranking?.byTable?.[tournament.tableBrand] ?? 0;
-
-      return {
-        positionElo,
-        generalElo,
-        modeAdjust,
-        tableAdjust,
-        effectiveElo: calculateEffectiveRating(positionElo, generalElo, modeAdjust, tableAdjust),
-      };
+      return ranking ? (position === 'portero' ? ranking.asGoalkeeper : ranking.asForward) : fallbackElo;
     };
 
-    const winnerGoalkeeperContext = getPlayerContext(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.elo, 'portero');
-    const winnerForwardContext = getPlayerContext(winnerPair.forward.userId, winnerPair.forward.elo, 'delantero');
-    const loserGoalkeeperContext = getPlayerContext(loserPair.goalkeeper.userId, loserPair.goalkeeper.elo, 'portero');
-    const loserForwardContext = getPlayerContext(loserPair.forward.userId, loserPair.forward.elo, 'delantero');
+    const winGkElo = getPlayerElo(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.elo, 'portero');
+    const winFwElo = getPlayerElo(winnerPair.forward.userId, winnerPair.forward.elo, 'delantero');
+    const loseGkElo = getPlayerElo(loserPair.goalkeeper.userId, loserPair.goalkeeper.elo, 'portero');
+    const loseFwElo = getPlayerElo(loserPair.forward.userId, loserPair.forward.elo, 'delantero');
 
-    const winnerPairEffective = Math.round((winnerGoalkeeperContext.effectiveElo + winnerForwardContext.effectiveElo) / 2);
-    const loserPairEffective = Math.round((loserGoalkeeperContext.effectiveElo + loserForwardContext.effectiveElo) / 2);
-    const { winnerChange, loserChange } = calculateEloChange(winnerPairEffective, loserPairEffective);
+    const winnerPairAvg = Math.round((winGkElo + winFwElo) / 2);
+    const loserPairAvg = Math.round((loseGkElo + loseFwElo) / 2);
+    const { winnerChange, loserChange } = calculateEloChange(winnerPairAvg, loserPairAvg);
 
     const changes: EloChangeDisplay['changes'] = [];
 
@@ -416,7 +393,7 @@ export default function TournamentDetailPage() {
       displayName: string,
       rawChange: number,
       position: 'portero' | 'delantero',
-      context: { positionElo: number; generalElo: number; modeAdjust: number; tableAdjust: number; effectiveElo: number }
+      won: boolean
     ) => {
       if (isGuestPlayer(userId)) return;
 
@@ -425,24 +402,24 @@ export default function TournamentDetailPage() {
 
       const scaledChange = Math.round(rawChange * eloMultiplier);
       if (scaledChange === 0) {
-        // Record zero-change entry for display consistency
         changes.push({
           userId, displayName, position,
           previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0, modeChange: 0, tableChange: 0, tableRawDelta: 0, totalAppliedChange: 0,
-          rawChange, multiplier: eloMultiplier,
-          baseGeneralElo: context.generalElo, basePositionElo: context.positionElo,
-          modeAdjust: context.modeAdjust, tableAdjust: context.tableAdjust,
-          effectiveElo: context.effectiveElo,
+          generalChange: 0, totalAppliedChange: 0,
+          rawChange, multiplier: eloMultiplier, contextCoefficient: 1, won,
         });
         return;
       }
-      const positionChange = Math.round(scaledChange * 0.45);
-      const generalChange = Math.round(scaledChange * 0.30);
-      const requestedModeChange = Math.round(scaledChange * 0.15);
-      const requestedTableChange = scaledChange - positionChange - generalChange - requestedModeChange;
+
+      // Apply contextual coefficient (0.85 – 1.15)
+      const coeff = getContextualCoefficient(userId, tournament.playStyle, tournament.tableBrand, won);
+      const adjustedChange = Math.round(scaledChange * coeff);
+
+      // Simple split: 60% to position, 40% to general
+      const positionChange = Math.round(adjustedChange * 0.6);
+      const generalChange = adjustedChange - positionChange;
 
       const previousElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const previousGeneral = ranking.general;
@@ -451,50 +428,26 @@ export default function TournamentDetailPage() {
       if (position === 'portero') ranking.asGoalkeeper += positionChange;
       else ranking.asForward += positionChange;
 
-      const previousModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
-      const nextModeAdjust = clamp(previousModeAdjust + requestedModeChange, -180, 180);
-      ranking.byStyle[tournament.playStyle] = nextModeAdjust;
-      const appliedModeChange = nextModeAdjust - previousModeAdjust;
-
-      const appliedTableChange = applyTableAdjustmentDelta(
-        ranking,
-        userId,
-        tournament.tableBrand,
-        requestedTableChange
-      );
-
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-      const appliedPositionChange = newElo - previousElo;
-      const totalAppliedChange = appliedPositionChange + generalChange + appliedModeChange + appliedTableChange;
+      const totalAppliedChange = (newElo - previousElo) + generalChange;
 
       changes.push({
-        userId,
-        displayName,
-        position,
-        previousElo,
-        newElo,
-        change: appliedPositionChange,
-        previousGeneral,
-        newGeneral: ranking.general,
-        generalChange,
-        modeChange: appliedModeChange,
-        tableChange: appliedTableChange,
-        tableRawDelta: requestedTableChange,
-        totalAppliedChange,
-        rawChange,
-        multiplier: eloMultiplier,
-        baseGeneralElo: context.generalElo,
-        basePositionElo: context.positionElo,
-        modeAdjust: context.modeAdjust,
-        tableAdjust: context.tableAdjust,
-        effectiveElo: context.effectiveElo,
+        userId, displayName, position,
+        previousElo, newElo,
+        change: newElo - previousElo,
+        previousGeneral, newGeneral: ranking.general,
+        generalChange, totalAppliedChange,
+        rawChange, multiplier: eloMultiplier, contextCoefficient: coeff, won,
       });
+
+      // Record context stats
+      recordContextStats(userId, tournament.playStyle, tournament.tableBrand, won);
     };
 
-    updateRanking(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerChange, 'portero', winnerGoalkeeperContext);
-    updateRanking(winnerPair.forward.userId, winnerPair.forward.displayName, winnerChange, 'delantero', winnerForwardContext);
-    updateRanking(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserChange, 'portero', loserGoalkeeperContext);
-    updateRanking(loserPair.forward.userId, loserPair.forward.displayName, loserChange, 'delantero', loserForwardContext);
+    updateRanking(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerChange, 'portero', true);
+    updateRanking(winnerPair.forward.userId, winnerPair.forward.displayName, winnerChange, 'delantero', true);
+    updateRanking(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserChange, 'portero', false);
+    updateRanking(loserPair.forward.userId, loserPair.forward.displayName, loserChange, 'delantero', false);
 
     const wGk = MOCK_RANKINGS.find(r => r.userId === winnerPair.goalkeeper.userId);
     const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
@@ -545,8 +498,6 @@ export default function TournamentDetailPage() {
     const entry = eloChanges.find(ec => ec.matchKey === matchKey);
     if (!entry) return;
 
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
     entry.changes.forEach(change => {
       if (isGuestPlayer(change.userId)) return;
       const ranking = MOCK_RANKINGS.find(r => r.userId === change.userId);
@@ -556,16 +507,8 @@ export default function TournamentDetailPage() {
       else ranking.asForward -= change.change;
       ranking.general -= change.generalChange;
 
-      const currentModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
-      ranking.byStyle[tournament.playStyle] = clamp(currentModeAdjust - change.modeChange, -180, 180);
-
-      applyTableAdjustmentDelta(
-        ranking,
-        change.userId,
-        tournament.tableBrand,
-        change.tableRawDelta || change.tableChange,
-        { revert: true }
-      );
+      // Revert context stats
+      recordContextStats(change.userId, tournament.playStyle, tournament.tableBrand, change.won, { revert: true });
 
       if (change.rawChange > 0) ranking.wins = Math.max(0, ranking.wins - 1);
       if (change.rawChange < 0) ranking.losses = Math.max(0, ranking.losses - 1);
