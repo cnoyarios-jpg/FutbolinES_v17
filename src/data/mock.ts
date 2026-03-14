@@ -1857,7 +1857,8 @@ export function generateRandomPairs(tournamentId: string): TournamentPair[] {
   return pairs;
 }
 
-export function confirmGeneratedPairs(pairs: TournamentPair[]) {
+export function confirmGeneratedPairs(tournamentIdOrPairs: string | TournamentPair[], maybePairs?: TournamentPair[]) {
+  const pairs = Array.isArray(tournamentIdOrPairs) ? tournamentIdOrPairs : (maybePairs || []);
   pairs.forEach(p => {
     if (!MOCK_PAIRS.some(mp => mp.id === p.id)) {
       MOCK_PAIRS.push(p);
