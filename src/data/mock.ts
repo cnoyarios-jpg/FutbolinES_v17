@@ -36,10 +36,18 @@ const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
 const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 
 // ===== POSTAL CODE → CITY MAPPING =====
-import { lookupPostalCode } from '@/data/postalCodes';
+import { estimatePostalCodeDistance, lookupPostalCode, lookupPostalCodeLocation } from '@/data/postalCodes';
 
 export function getCityFromPostalCode(postalCode: string): string {
   return lookupPostalCode(postalCode);
+}
+
+export function getLocationFromPostalCode(postalCode: string): { city: string; province: string } {
+  const location = lookupPostalCodeLocation(postalCode);
+  return {
+    city: location?.municipality || '',
+    province: location?.province || '',
+  };
 }
 
 export function getRegisteredUsers(): RegisteredUser[] {
@@ -566,6 +574,31 @@ export function getVenueMostCommonStyle(venueId: string): string | null {
   return parado >= movimiento ? 'Parado' : 'Movimiento';
 }
 
+export function getNearbyVenuesByPostalCode(userPostalCode?: string, limit: number = 3): Venue[] {
+  const activeVenues = MOCK_VENUES.filter(v => v.status === 'activo');
+  if (!userPostalCode || !/^\d{5}$/.test(userPostalCode)) return activeVenues.slice(0, limit);
+
+  const userCity = getCityFromPostalCode(userPostalCode).toLowerCase();
+  const getDistance = (venue: Venue) => {
+    if (venue.postalCode && /^\d{5}$/.test(venue.postalCode)) {
+      return estimatePostalCodeDistance(userPostalCode, venue.postalCode);
+    }
+    if (userCity && venue.city.toLowerCase() === userCity) {
+      return 25;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+
+  return [...activeVenues]
+    .sort((a, b) => {
+      const distA = getDistance(a);
+      const distB = getDistance(b);
+      if (distA === distB) return a.name.localeCompare(b.name, 'es');
+      return distA - distB;
+    })
+    .slice(0, limit);
+}
+
 // ===== VENUE RANKINGS =====
 
 export function getVenueRankings(): { venueId: string; name: string; city: string; avgElo: number; tournamentCount: number; playerCount: number }[] {
@@ -959,12 +992,12 @@ export const MOCK_USER: User = {
 // ===== VENUES =====
 
 export const MOCK_VENUES: Venue[] = [
-  { id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid', photos: ['/placeholder.svg'], description: 'Bar clásico con futbolín de competición.', observations: 'Abierto solo fines de semana.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-15', confidenceScore: 92, verificationCount: 5, createdBy: 'u1', createdAt: '2024-01-01' },
-  { id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 305', city: 'Barcelona', photos: ['/placeholder.svg'], description: 'Cafetería deportiva con ambiente competitivo.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-02-01', confidenceScore: 88, verificationCount: 4, createdBy: 'u2', createdAt: '2024-02-15' },
-  { id: 'v3', name: 'La Bolera Social', address: 'Alameda Mazarredo 8', city: 'Bilbao', photos: ['/placeholder.svg'], description: 'Local con zona de juegos y futbolín profesional.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 65, verificationCount: 1, createdBy: 'u3', createdAt: '2024-03-10' },
-  { id: 'v4', name: 'Pub Game Over', address: 'C/ Sierpes 20', city: 'Sevilla', photos: ['/placeholder.svg'], description: 'Pub temático gamer con varios futbolines.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-20', confidenceScore: 85, verificationCount: 3, createdBy: 'u4', createdAt: '2024-04-01' },
-  { id: 'v5', name: 'Bar Universitario', address: 'C/ Doctor Moliner 50', city: 'Valencia', photos: ['/placeholder.svg'], status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 55, verificationCount: 0, createdBy: 'u5', createdAt: '2024-05-01' },
-  { id: 'v6', name: 'Recreativos Luna', address: 'C/ Luna 12', city: 'Madrid', photos: ['/placeholder.svg'], description: 'Sala de recreativos con futbolín clásico.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 60, verificationCount: 1, createdBy: 'u6', createdAt: '2024-06-01' },
+  { id: 'v1', name: 'Bar El Rincón', address: 'C/ Gran Vía 42', city: 'Madrid', postalCode: '28001', province: 'Madrid', photos: ['/placeholder.svg'], description: 'Bar clásico con futbolín de competición.', observations: 'Abierto solo fines de semana.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-15', confidenceScore: 92, verificationCount: 5, createdBy: 'u1', createdAt: '2024-01-01' },
+  { id: 'v2', name: 'Café Sport', address: 'Av. Diagonal 305', city: 'Barcelona', postalCode: '08001', province: 'Barcelona', photos: ['/placeholder.svg'], description: 'Cafetería deportiva con ambiente competitivo.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-02-01', confidenceScore: 88, verificationCount: 4, createdBy: 'u2', createdAt: '2024-02-15' },
+  { id: 'v3', name: 'La Bolera Social', address: 'Alameda Mazarredo 8', city: 'Bilbao', postalCode: '48001', province: 'Bizkaia', photos: ['/placeholder.svg'], description: 'Local con zona de juegos y futbolín profesional.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 65, verificationCount: 1, createdBy: 'u3', createdAt: '2024-03-10' },
+  { id: 'v4', name: 'Pub Game Over', address: 'C/ Sierpes 20', city: 'Sevilla', postalCode: '41001', province: 'Sevilla', photos: ['/placeholder.svg'], description: 'Pub temático gamer con varios futbolines.', status: 'activo', verificationLevel: 'verificado', lastVerified: '2026-01-20', confidenceScore: 85, verificationCount: 3, createdBy: 'u4', createdAt: '2024-04-01' },
+  { id: 'v5', name: 'Bar Universitario', address: 'C/ Doctor Moliner 50', city: 'Valencia', postalCode: '46001', province: 'Valencia', photos: ['/placeholder.svg'], status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 55, verificationCount: 0, createdBy: 'u5', createdAt: '2024-05-01' },
+  { id: 'v6', name: 'Recreativos Luna', address: 'C/ Luna 12', city: 'Madrid', postalCode: '28015', province: 'Madrid', photos: ['/placeholder.svg'], description: 'Sala de recreativos con futbolín clásico.', status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 60, verificationCount: 1, createdBy: 'u6', createdAt: '2024-06-01' },
 ];
 
 export const MOCK_TABLES: VenueTable[] = [

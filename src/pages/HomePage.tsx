@@ -1,13 +1,14 @@
 import { motion } from 'framer-motion';
 import { MapPin, Trophy, BarChart3, Users, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { MOCK_TOURNAMENTS, MOCK_VENUES, MOCK_TABLES } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_TABLES, getCurrentUser, getNearbyVenuesByPostalCode } from '@/data/mock';
 import TournamentCard from '@/components/TournamentCard';
 import VenueCard from '@/components/VenueCard';
 
 export default function HomePage() {
   const upcomingTournaments = MOCK_TOURNAMENTS.filter(t => t.status === 'abierto').slice(0, 2);
-  const featuredVenues = MOCK_VENUES.filter(v => v.status === 'activo').slice(0, 3);
+  const currentUser = getCurrentUser();
+  const featuredVenues = getNearbyVenuesByPostalCode(currentUser?.postalCode, 3);
 
   return (
     <div className="min-h-screen pb-20">
@@ -56,11 +57,8 @@ export default function HomePage() {
         )}
 
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3">
             <h2 className="font-display text-base font-bold">Futbolines cerca</h2>
-            <Link to="/mapa" className="flex items-center gap-0.5 text-xs font-bold text-primary hover:text-primary/80 transition">
-              Ver mapa <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
           </div>
           <div className="flex flex-col gap-3">
             {featuredVenues.map(v => (
