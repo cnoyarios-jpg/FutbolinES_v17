@@ -135,7 +135,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
           ? rating.asGoalkeeper
           : eloPositionFilter === 'delantero'
             ? rating.asForward
-            : rating.general;
+            : generalElo;
 
       return [{
         date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
