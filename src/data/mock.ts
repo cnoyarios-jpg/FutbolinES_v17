@@ -1720,7 +1720,22 @@ export function getTeamMatchesForTeam(teamId: string): TeamMatch[] {
   return getTeamMatches().filter(m => m.team1Id === teamId || m.team2Id === teamId);
 }
 
-export function createTeamMatch(match: TeamMatch) {
+export function createTeamMatch(team1IdOrMatch: string | TeamMatch, team2Id?: string, pairingsCount?: number) {
+  if (typeof team1IdOrMatch === 'object') {
+    saveTeamMatch(team1IdOrMatch);
+    return;
+  }
+  const pairings: TeamMatchPairing[] = Array.from({ length: pairingsCount || 3 }, (_, idx) => ({
+    id: `tmp_${Date.now()}_${idx}`,
+    teamMatchId: '',
+    pair1GoalkeeperName: '', pair1ForwardName: '',
+    pair2GoalkeeperName: '', pair2ForwardName: '',
+  }));
+  const match: TeamMatch = {
+    id: `tmatch_${Date.now()}`, team1Id: team1IdOrMatch, team2Id: team2Id!,
+    pairings, status: 'pendiente', date: new Date().toISOString(),
+  };
+  match.pairings.forEach(p => p.teamMatchId = match.id);
   saveTeamMatch(match);
 }
 
