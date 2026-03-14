@@ -479,7 +479,7 @@ export default function TournamentDetailPage() {
     });
 
     if (guestCount > 0) {
-      const allZero = changes.every(c => c.totalAppliedChange === 0);
+      const allZero = changes.every(c => c.change === 0);
       toast.info(allZero ? 'Partido con invitados: cambio real 0 en ELO' : 'Partido con invitados: ELO reducido al 25%');
     } else {
       toast.success('Ganador registrado. ELO actualizado.');
