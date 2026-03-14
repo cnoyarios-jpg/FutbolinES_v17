@@ -7,10 +7,11 @@ import {
   getRegisteredUsers, getEloHistory, ensureEloHistory, getPlayerRivalries,
   getActivityLog, getNotifications,
 } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity } from 'lucide-react';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity, Sun, Moon } from 'lucide-react';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
 import AchievementsSection from '@/components/AchievementsSection';
+import { useTheme } from '@/hooks/use-theme';
 import MvpHistorySection from '@/components/MvpHistorySection';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
