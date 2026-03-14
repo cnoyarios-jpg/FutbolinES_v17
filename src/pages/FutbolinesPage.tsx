@@ -22,7 +22,8 @@ export default function FutbolinesPage() {
     tableCondition: 'buen_estado' as TableCondition,
   });
 
-  const derivedCity = venueForm.postalCode.length >= 2 ? getCityFromPostalCode(venueForm.postalCode) : '';
+  const derivedLocation = venueForm.postalCode.length === 5 ? getLocationFromPostalCode(venueForm.postalCode) : null;
+  const derivedCity = derivedLocation?.city || '';
 
   const filteredVenues = useMemo(() => {
     return MOCK_VENUES.filter(v => {
