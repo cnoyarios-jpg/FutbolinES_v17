@@ -5,7 +5,7 @@ import {
   MOCK_USER, MOCK_RANKINGS, MOCK_TEAMS, MOCK_PAIRS, MOCK_TOURNAMENTS,
   getCurrentUser, updateUserPreferences, getFrequentPartners, getPairHistory,
   getRegisteredUsers, getEloHistory, ensureEloHistory, getPlayerRivalries,
-  getActivityLog, getNotifications,
+  getActivityLog, getNotifications, getContextStats,
 } from '@/data/mock';
 import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity, Sun, Moon } from 'lucide-react';
 import { Position, TableBrand } from '@/types';
