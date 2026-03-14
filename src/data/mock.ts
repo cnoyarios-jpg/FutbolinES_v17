@@ -1868,7 +1868,7 @@ export function getEloHistory(userId: string): EloHistoryEntry[] {
   } catch { return []; }
 }
 
-export function recordEloHistory(userId: string, elo: number, event?: string, position?: 'general' | 'portero' | 'delantero') {
+export function recordEloHistory(userId: string, elo: number, event?: string, position?: string) {
   if (isGuestPlayer(userId)) return;
   try {
     const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
@@ -1881,19 +1881,19 @@ export function ensureEloHistory(userId: string) {
   try {
     const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
     const userEntries = all.filter(e => e.userId === userId);
-    if (userEntries.length > 0) return; // already has real history
+    if (userEntries.length > 0) return;
 
     const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
     if (!ranking) return;
     
-    // Find registration date — only create a single starting point
     const regUsers = getRegisteredUsers();
     const regUser = regUsers.find(u => u.id === userId);
     const registrationDate = regUser?.createdAt ? new Date(regUser.createdAt).toISOString() : new Date().toISOString();
     
-    // Single entry at registration with initial ELO (no fake progression)
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero', event: 'Registro' });
-    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero_parado', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero_movimiento', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero_parado', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero_movimiento', event: 'Registro' });
     all.push({ userId, elo: 1500, date: registrationDate, position: 'general', event: 'Registro' });
 
     localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
