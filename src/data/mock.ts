@@ -1627,22 +1627,21 @@ export const TABLE_CONDITION_COLORS: Record<TableCondition, string> = {
   fuera_de_servicio: 'text-red-600 bg-red-100',
 };
 
-// Search players
-export function searchPlayers(query: string): { userId: string; displayName: string; elo: number; city?: string }[] {
+// Search players - returns full ranking data for consumer access
+export function searchPlayers(query: string): (typeof MOCK_RANKINGS[0])[] {
   if (!query || query.length < 2) return [];
   const q = query.toLowerCase();
   return MOCK_RANKINGS
     .filter(r => r.displayName.toLowerCase().includes(q))
-    .map(r => ({ userId: r.userId, displayName: r.displayName, elo: r.general, city: r.city }))
     .slice(0, 10);
 }
 
 // Find or create player (for tournament enrollment)
-export function findOrCreatePlayer(displayName: string, elo: number = 1500): { userId: string; displayName: string; elo: number } {
+export function findOrCreatePlayer(displayName: string, _cityOrElo?: string | number, _position?: string): { userId: string; displayName: string; elo: number } {
   const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
   if (existing) return { userId: existing.userId, displayName: existing.displayName, elo: existing.general };
   const guest = createGuestPlayer(displayName);
-  return { userId: guest.id, displayName: guest.displayName, elo };
+  return { userId: guest.id, displayName: guest.displayName, elo: 1500 };
 }
 
 export function findOrCreateRegisteredPlayer(displayName: string): { userId: string; displayName: string; elo: number } | null {
