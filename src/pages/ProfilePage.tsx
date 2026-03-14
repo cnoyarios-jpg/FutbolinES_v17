@@ -86,8 +86,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const topPartner = partners.length > 0 ? partners[0] : null;
   const pairHistory = getPairHistory(targetUserId);
 
-  const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
-  const bestStyle = rating ? (rating.byStyle.parado > rating.byStyle.movimiento ? 'Parado' : rating.byStyle.movimiento > rating.byStyle.parado ? 'Movimiento' : preferredStyle ? (preferredStyle === 'parado' ? 'Parado' : 'Movimiento') : 'Parado') : null;
+  const contextStats = getContextStats(targetUserId);
   const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
 
   const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
