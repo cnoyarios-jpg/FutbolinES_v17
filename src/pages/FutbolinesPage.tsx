@@ -39,10 +39,12 @@ export default function FutbolinesPage() {
     if (!venueForm.name.trim()) { toast.error('El nombre del local es obligatorio'); return; }
     if (!venueForm.postalCode.trim() || !/^\d{5}$/.test(venueForm.postalCode.trim())) { toast.error('El código postal debe ser exactamente 5 dígitos'); return; }
 
-    const city = derivedCity || venueForm.postalCode;
+    if (!derivedCity) { toast.error('No se encontró municipio para ese código postal'); return; }
+
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
-      id: newId, name: venueForm.name, address: venueForm.address || '', city,
+      id: newId, name: venueForm.name, address: venueForm.address || '', city: derivedCity,
+      postalCode: venueForm.postalCode.trim(), province: derivedLocation?.province,
       photos: [], description: venueForm.description || undefined,
       status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 50,
       verificationCount: 0, createdBy: 'u1', createdAt: new Date().toISOString().split('T')[0],
