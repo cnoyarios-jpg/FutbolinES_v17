@@ -187,13 +187,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {isRegister && (
               <>
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
                   <input
-                    className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`}
                     placeholder="Ej: 28001"
                     value={postalCode}
-                    onChange={e => setPostalCode(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 5);
+                      setPostalCode(val);
+                    }}
+                    maxLength={5}
+                    inputMode="numeric"
                   />
+                  {postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) && (
+                    <p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Posición preferida</label>

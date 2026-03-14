@@ -15,9 +15,11 @@ import { useTheme } from '@/hooks/use-theme';
 import MvpHistorySection from '@/components/MvpHistorySection';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
+
+type EloFilter = 'general' | 'portero_parado' | 'portero_movimiento' | 'delantero_parado' | 'delantero_movimiento';
 
 interface ProfilePageProps {
   onLogout?: () => void;
@@ -28,7 +30,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const { theme, toggleTheme } = useTheme();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
-  const [eloPositionFilter, setEloPositionFilter] = useState<'general' | 'portero' | 'delantero'>('general');
+  const [eloPositionFilter, setEloPositionFilter] = useState<EloFilter>('general');
   const [, forceUpdate] = useState(0);
 
   const isOwnProfile = !userId;
@@ -75,8 +77,13 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     playerType = user.playerType;
   }
 
-  // General ELO = average of goalkeeper and forward
-  const generalElo = rating ? Math.round((rating.asGoalkeeper + rating.asForward) / 2) : 0;
+  // 5-ELO model
+  const gkStill = rating?.goalkeeperStill ?? rating?.asGoalkeeper ?? 0;
+  const gkMoving = rating?.goalkeeperMoving ?? rating?.asGoalkeeper ?? 0;
+  const fwStill = rating?.forwardStill ?? rating?.asForward ?? 0;
+  const fwMoving = rating?.forwardMoving ?? rating?.asForward ?? 0;
+  const generalElo = rating ? Math.round((gkStill + gkMoving + fwStill + fwMoving) / 4) : 0;
+
   const division = rating ? getDivision(generalElo) : null;
   const teams = MOCK_TEAMS.filter(t => t.captainId === targetUserId);
   const winrate = rating && (rating.wins + rating.losses > 0) ? Math.round((rating.wins / (rating.wins + rating.losses)) * 100) : 0;
@@ -85,9 +92,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const partners = getFrequentPartners(targetUserId);
   const topPartner = partners.length > 0 ? partners[0] : null;
   const pairHistory = getPairHistory(targetUserId);
-
   const contextStats = getContextStats(targetUserId);
-  const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
 
   const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
     if (t.status !== 'finalizado') return false;
@@ -95,17 +100,11 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     return tPairs.some(p => p.goalkeeper.userId === targetUserId || p.forward.userId === targetUserId);
   });
 
-  // ELO history with real day aggregation (7d / 30d / 3m / all)
+  // ELO history
   ensureEloHistory(targetUserId);
   const eloChartData = useMemo(() => {
     const history = getEloHistory(targetUserId);
-    const dayRanges: Record<'7d' | '30d' | '3m' | 'all', number | null> = {
-      '7d': 7,
-      '30d': 30,
-      '3m': 90,
-      'all': null,
-    };
-
+    const dayRanges: Record<string, number | null> = { '7d': 7, '30d': 30, '3m': 90, 'all': null };
     const rangeDays = dayRanges[eloTimeFilter];
     const startDate = (() => {
       if (rangeDays === null) return null;
@@ -129,17 +128,12 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     const aggregated = Array.from(lastPerDay.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (aggregated.length === 0 && rating) {
-      const currentElo =
-        eloPositionFilter === 'portero'
-          ? rating.asGoalkeeper
-          : eloPositionFilter === 'delantero'
-            ? rating.asForward
-            : generalElo;
-
-      return [{
-        date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-        elo: currentElo,
-      }];
+      const currentElo = eloPositionFilter === 'general' ? generalElo
+        : eloPositionFilter === 'portero_parado' ? gkStill
+        : eloPositionFilter === 'portero_movimiento' ? gkMoving
+        : eloPositionFilter === 'delantero_parado' ? fwStill
+        : fwMoving;
+      return [{ date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }), elo: currentElo }];
     }
 
     return aggregated.map(e => ({
@@ -148,7 +142,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     }));
   }, [targetUserId, eloTimeFilter, eloPositionFilter, rating]);
 
-  // Rivalries & Activity
   const rivalries = getPlayerRivalries(targetUserId);
   const activityLog = getActivityLog(targetUserId);
   const unreadNotifs = isOwnProfile && currentUser ? getNotifications(currentUser.id).filter(n => !n.read).length : 0;
@@ -168,6 +161,14 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     match_win: '✅', match_loss: '❌', tournament_win: '🏆', mvp: '⭐', division_up: '📈', division_down: '📉',
   };
 
+  const eloFilterLabels: Record<EloFilter, string> = {
+    general: '📊 General',
+    portero_parado: '🧤🧱 P. Parado',
+    portero_movimiento: '🧤💨 P. Movimiento',
+    delantero_parado: '⚽🧱 D. Parado',
+    delantero_movimiento: '⚽💨 D. Movimiento',
+  };
+
   return (
     <PageShell>
       {!isOwnProfile && (
@@ -178,7 +179,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Quick links for own profile */}
       {isOwnProfile && (
         <div className="flex gap-2 mb-4">
           <Link to="/mi-equipo" className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-xs font-medium text-muted-foreground">
@@ -228,25 +228,34 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         )}
       </div>
 
-      {/* ELO Cards - clickable to show breakdown */}
+      {/* 5 ELO Cards */}
       {rating && (
         <div className="mt-6">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl bg-gradient-to-br from-accent/20 to-accent/5 p-4 text-center border border-accent/10">
-              <Trophy className="h-5 w-5 mx-auto text-accent" />
-              <p className="mt-1.5 font-display text-2xl font-bold">{generalElo}</p>
-              <p className="text-[10px] text-muted-foreground font-medium">ELO General</p>
-              <p className="text-[8px] text-muted-foreground mt-0.5">= media P + D</p>
+          {/* General ELO big card */}
+          <div className="rounded-2xl bg-gradient-to-br from-accent/20 to-accent/5 p-4 text-center border border-accent/10 mb-3">
+            <Trophy className="h-5 w-5 mx-auto text-accent" />
+            <p className="mt-1 font-display text-3xl font-bold">{generalElo}</p>
+            <p className="text-[10px] text-muted-foreground font-medium">ELO General</p>
+            <p className="text-[8px] text-muted-foreground mt-0.5">= media de los 4 ELO específicos</p>
+          </div>
+
+          {/* 4 specific ELOs */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 p-3 text-center border border-primary/10">
+              <p className="text-[10px] text-muted-foreground font-semibold">🧤🧱 Portero Parado</p>
+              <p className="font-display text-xl font-bold mt-1">{gkStill}</p>
             </div>
-            <div className="rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 p-4 text-center border border-primary/10">
-              <Shield className="h-5 w-5 mx-auto text-primary" />
-              <p className="mt-1.5 font-display text-2xl font-bold">{rating.asGoalkeeper}</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Portero</p>
+            <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 p-3 text-center border border-primary/10">
+              <p className="text-[10px] text-muted-foreground font-semibold">🧤💨 Portero Movimiento</p>
+              <p className="font-display text-xl font-bold mt-1">{gkMoving}</p>
             </div>
-            <div className="rounded-2xl bg-gradient-to-br from-secondary/15 to-secondary/5 p-4 text-center border border-secondary/10">
-              <Target className="h-5 w-5 mx-auto text-secondary" />
-              <p className="mt-1.5 font-display text-2xl font-bold">{rating.asForward}</p>
-              <p className="text-[10px] text-muted-foreground font-medium">Delantero</p>
+            <div className="rounded-xl bg-gradient-to-br from-secondary/15 to-secondary/5 p-3 text-center border border-secondary/10">
+              <p className="text-[10px] text-muted-foreground font-semibold">⚽🧱 Delantero Parado</p>
+              <p className="font-display text-xl font-bold mt-1">{fwStill}</p>
+            </div>
+            <div className="rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 p-3 text-center border border-secondary/10">
+              <p className="text-[10px] text-muted-foreground font-semibold">⚽💨 Delantero Movimiento</p>
+              <p className="font-display text-xl font-bold mt-1">{fwMoving}</p>
             </div>
           </div>
         </div>
@@ -266,16 +275,12 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
               ))}
             </div>
           </div>
-          {/* Position filter */}
-          <div className="flex gap-1 mb-3">
-            {([
-              { key: 'general' as const, label: 'General', icon: '📊' },
-              { key: 'portero' as const, label: 'Portero', icon: '🧤' },
-              { key: 'delantero' as const, label: 'Delantero', icon: '⚽' },
-            ]).map(({ key, label, icon }) => (
+          {/* 5 ELO filter */}
+          <div className="flex flex-wrap gap-1 mb-3">
+            {(Object.entries(eloFilterLabels) as [EloFilter, string][]).map(([key, label]) => (
               <button key={key} onClick={() => setEloPositionFilter(key)}
-                className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition ${eloPositionFilter === key ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                {icon} {label}
+                className={`rounded px-2 py-0.5 text-[9px] font-medium transition ${eloPositionFilter === key ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                {label}
               </button>
             ))}
           </div>
@@ -289,15 +294,8 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="elo"
-                  stroke={eloPositionFilter === 'portero' ? 'hsl(var(--primary))' : eloPositionFilter === 'delantero' ? 'hsl(var(--secondary))' : 'hsl(var(--primary))'}
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                  activeDot={{ r: 3 }}
-                  name={eloPositionFilter === 'portero' ? 'ELO Portero' : eloPositionFilter === 'delantero' ? 'ELO Delantero' : 'ELO General'}
-                />
+                <Line type="monotone" dataKey="elo" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 3 }}
+                  name={eloFilterLabels[eloPositionFilter]} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -316,7 +314,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Achievements */}
       <AchievementsSection userId={targetUserId} />
 
       {/* Advanced Stats */}
@@ -340,7 +337,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
               <p className="text-muted-foreground">Mejor racha</p>
               <p className="font-display text-lg font-bold">{rating.bestStreak || 0}</p>
             </div>
-            {bestPosition && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor posición</p><p className="font-semibold">{bestPosition}</p></div>}
             {(() => {
               const modes = Object.entries(contextStats.byMode);
               if (modes.length === 0) return null;
@@ -359,7 +355,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Rivalries - now with win/loss counts */}
+      {/* Rivalries */}
       {rivalries.length > 0 && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold mb-3 flex items-center gap-1.5">
@@ -439,7 +435,6 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
       )}
 
-      {/* MVP History */}
       <MvpHistorySection userId={targetUserId} />
 
       {/* Teams */}
