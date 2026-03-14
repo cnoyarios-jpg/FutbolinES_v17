@@ -39,7 +39,7 @@ export default function FutbolinesPage() {
     if (!venueForm.name.trim()) { toast.error('El nombre del local es obligatorio'); return; }
     if (!venueForm.postalCode.trim() || !/^\d{5}$/.test(venueForm.postalCode.trim())) { toast.error('El código postal debe ser exactamente 5 dígitos'); return; }
 
-    if (!derivedCity) { toast.error('No se encontró municipio para ese código postal'); return; }
+    if (!derivedLocation?.province) { toast.error('No se encontró provincia para ese código postal'); return; }
 
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
