@@ -308,13 +308,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   </p>
                   {/* Effective ratings per position × mode, showing best table too */}
                   {(() => {
-                    const tableEntries = Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0);
-                    const bestTableAdj = tableEntries.length > 0
-                      ? Math.max(...tableEntries.map(([,v]) => Math.max(-90, Math.min(90, v as number || 0))))
-                      : 0;
-                    const bestTableName = tableEntries.length > 0
-                      ? tableEntries.find(([,v]) => Math.max(-90, Math.min(90, v as number || 0)) === bestTableAdj)?.[0] || ''
-                      : '';
+                    const tableEntries = Object.entries(rating.byTable)
+                      .filter(([,v]) => v !== undefined)
+                      .sort(([,a],[,b]) => (b as number || 0) - (a as number || 0));
 
                     return (
                       <div className="mt-2 space-y-1.5 text-[10px]">
@@ -324,6 +320,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                           return (['parado', 'movimiento'] as const).map(style => {
                             const modeAdj = Math.max(-180, Math.min(180, rating.byStyle[style] || 0));
                             const base = Math.round(0.6 * posElo + 0.4 * rating.general);
+                            // Show with best table and worst table for contrast
+                            const bestTableAdj = tableEntries.length > 0 ? Math.max(-90, Math.min(90, tableEntries[0][1] as number || 0)) : 0;
+                            const bestTableName = tableEntries.length > 0 ? tableEntries[0][0] : '';
                             const effective = Math.round(0.6 * posElo + 0.4 * rating.general + modeAdj + bestTableAdj);
                             return (
                               <div key={`${pos}-${style}`} className="rounded bg-muted px-2 py-1.5 flex justify-between items-center">
