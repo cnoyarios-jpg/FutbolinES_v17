@@ -35,6 +35,19 @@ function unquoteCsv(value: string): string {
   return trimmed;
 }
 
+/**
+ * Convert INE-style "Name, Article" to "Article Name".
+ * Examples: "Baña, A" → "A Baña", "Grove, O" → "O Grove",
+ *           "Cubo de Tierra del Vino, El" → "El Cubo de Tierra del Vino"
+ */
+function fixArticleSuffix(name: string): string {
+  const match = name.match(/^(.+),\s*(A|O|As|Os|El|La|Los|Las|Es|Sa|S')$/i);
+  if (match) {
+    return `${match[2]} ${match[1]}`;
+  }
+  return name;
+}
+
 function buildPostalCodeIndex(): Record<string, PostalCodeLocation> {
   const index: Record<string, PostalCodeLocation> = {};
   const lines = postalCodesCsv.split(/\r?\n/);
@@ -49,7 +62,7 @@ function buildPostalCodeIndex(): Record<string, PostalCodeLocation> {
 
     const postalCode = line.slice(0, firstComma).trim();
     const municipalityId = line.slice(firstComma + 1, secondComma).trim();
-    const municipality = unquoteCsv(line.slice(secondComma + 1));
+    const municipality = fixArticleSuffix(unquoteCsv(line.slice(secondComma + 1)));
 
     if (!/^\d{5}$/.test(postalCode) || !/^\d{5}$/.test(municipalityId) || !municipality) continue;
 
