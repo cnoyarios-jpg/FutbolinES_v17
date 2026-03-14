@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, normalizeTableAdjustments } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, applyTableAdjustmentDelta } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
@@ -50,6 +50,7 @@ interface EloChangeDisplay {
     generalChange: number;
     modeChange: number;
     tableChange: number;
+    tableRawDelta: number;
     totalAppliedChange: number;
     rawChange: number;
     multiplier: number;
@@ -436,7 +437,7 @@ export default function TournamentDetailPage() {
           previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0, modeChange: 0, tableChange: 0, totalAppliedChange: 0,
+          generalChange: 0, modeChange: 0, tableChange: 0, tableRawDelta: 0, totalAppliedChange: 0,
           rawChange, multiplier: eloMultiplier,
           baseGeneralElo: context.generalElo, basePositionElo: context.positionElo,
           modeAdjust: context.modeAdjust, tableAdjust: context.tableAdjust,
@@ -461,11 +462,12 @@ export default function TournamentDetailPage() {
       ranking.byStyle[tournament.playStyle] = nextModeAdjust;
       const appliedModeChange = nextModeAdjust - previousModeAdjust;
 
-      const previousTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      // Accumulate raw delta, then normalize for relative performance
-      ranking.byTable[tournament.tableBrand] = (ranking.byTable[tournament.tableBrand] || 0) + requestedTableChange;
-      normalizeTableAdjustments(ranking);
-      const appliedTableChange = (ranking.byTable[tournament.tableBrand] || 0) - previousTableAdjust;
+      const appliedTableChange = applyTableAdjustmentDelta(
+        ranking,
+        userId,
+        tournament.tableBrand,
+        requestedTableChange
+      );
 
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const appliedPositionChange = newElo - previousElo;
@@ -483,6 +485,7 @@ export default function TournamentDetailPage() {
         generalChange,
         modeChange: appliedModeChange,
         tableChange: appliedTableChange,
+        tableRawDelta: requestedTableChange,
         totalAppliedChange,
         rawChange,
         multiplier: eloMultiplier,
@@ -562,9 +565,13 @@ export default function TournamentDetailPage() {
       const currentModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
       ranking.byStyle[tournament.playStyle] = clamp(currentModeAdjust - change.modeChange, -180, 180);
 
-      const currentTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      ranking.byTable[tournament.tableBrand] = (currentTableAdjust - change.tableChange);
-      normalizeTableAdjustments(ranking);
+      applyTableAdjustmentDelta(
+        ranking,
+        change.userId,
+        tournament.tableBrand,
+        change.tableRawDelta || change.tableChange,
+        { revert: true }
+      );
 
       if (change.rawChange > 0) ranking.wins = Math.max(0, ranking.wins - 1);
       if (change.rawChange < 0) ranking.losses = Math.max(0, ranking.losses - 1);
