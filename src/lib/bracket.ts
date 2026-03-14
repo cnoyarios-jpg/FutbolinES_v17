@@ -189,14 +189,12 @@ export function calculateEffectiveRating(
   modeAdjust: number,
   tableAdjust: number
 ): number {
-  const safeModeAdjust = Number.isFinite(modeAdjust) ? modeAdjust : 0;
-  const safeTableAdjust = Number.isFinite(tableAdjust) ? tableAdjust : 0;
+  const safeModeAdjust = Math.max(-180, Math.min(180, Number.isFinite(modeAdjust) ? modeAdjust : 0));
+  const safeTableAdjust = Math.max(-90, Math.min(90, Number.isFinite(tableAdjust) ? tableAdjust : 0));
 
   // Weighted base from position and general ELO
   const baseRating = 0.6 * positionElo + 0.4 * generalElo;
 
-  // Contextual shift from mode + table, capped at ±120
-  const contextualShift = Math.max(-120, Math.min(120, safeModeAdjust + safeTableAdjust));
-
-  return Math.round(baseRating + contextualShift);
+  // Add individually-capped adjustments (mode ±180, table ±90)
+  return Math.round(baseRating + safeModeAdjust + safeTableAdjust);
 }

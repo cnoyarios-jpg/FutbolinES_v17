@@ -297,26 +297,43 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                     <span className="font-mono">0.6 × ELO posición + 0.4 × ELO general + ajuste modo + ajuste mesa</span>
                   </p>
                   <p className="text-[9px] text-muted-foreground mt-0.5 italic">
-                    Ajustes son modificadores pequeños (modo ±180, mesa ±90), NO ratings completos. Cap total: ±120.
+                    Ajustes son modificadores pequeños (modo ±180, mesa ±90), NO ratings completos.
                   </p>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
-                    {(['parado', 'movimiento'] as const).map(style => (
-                      <div key={`eff-gk-${style}`} className="rounded bg-muted px-2 py-1">
-                        <span className="text-muted-foreground">Portero/{style}: </span>
-                        <span className="font-bold">
-                          {Math.round(0.6 * rating.asGoalkeeper + 0.4 * rating.general + Math.max(-120, Math.min(120, (rating.byStyle[style] || 0))))}
-                        </span>
+                  {/* Effective ratings per position × mode, showing best table too */}
+                  {(() => {
+                    const tableEntries = Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0);
+                    const bestTableAdj = tableEntries.length > 0
+                      ? Math.max(...tableEntries.map(([,v]) => Math.max(-90, Math.min(90, v as number || 0))))
+                      : 0;
+                    const bestTableName = tableEntries.length > 0
+                      ? tableEntries.find(([,v]) => Math.max(-90, Math.min(90, v as number || 0)) === bestTableAdj)?.[0] || ''
+                      : '';
+
+                    return (
+                      <div className="mt-2 space-y-1.5 text-[10px]">
+                        {(['portero', 'delantero'] as const).map(pos => {
+                          const posElo = pos === 'portero' ? rating.asGoalkeeper : rating.asForward;
+                          const posLabel = pos === 'portero' ? 'Portero' : 'Delantero';
+                          return (['parado', 'movimiento'] as const).map(style => {
+                            const modeAdj = Math.max(-180, Math.min(180, rating.byStyle[style] || 0));
+                            const base = Math.round(0.6 * posElo + 0.4 * rating.general);
+                            const effective = Math.round(0.6 * posElo + 0.4 * rating.general + modeAdj + bestTableAdj);
+                            return (
+                              <div key={`${pos}-${style}`} className="rounded bg-muted px-2 py-1.5 flex justify-between items-center">
+                                <span className="text-muted-foreground">{posLabel}/{style}{bestTableName ? `/${bestTableName}` : ''}:</span>
+                                <div className="text-right">
+                                  <span className="font-bold">{effective}</span>
+                                  <span className="text-muted-foreground ml-1 text-[9px]">
+                                    (base {base} {modeAdj >= 0 ? '+' : ''}{modeAdj} {bestTableAdj >= 0 ? '+' : ''}{bestTableAdj})
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })}
                       </div>
-                    ))}
-                    {(['parado', 'movimiento'] as const).map(style => (
-                      <div key={`eff-fw-${style}`} className="rounded bg-muted px-2 py-1">
-                        <span className="text-muted-foreground">Delantero/{style}: </span>
-                        <span className="font-bold">
-                          {Math.round(0.6 * rating.asForward + 0.4 * rating.general + Math.max(-120, Math.min(120, (rating.byStyle[style] || 0))))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
