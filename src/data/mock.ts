@@ -39,14 +39,17 @@ const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 import { estimatePostalCodeDistance, lookupPostalCode, lookupPostalCodeLocation } from '@/data/postalCodes';
 
 export function getCityFromPostalCode(postalCode: string): string {
-  return lookupPostalCode(postalCode);
+  const location = lookupPostalCodeLocation(postalCode);
+  if (location?.province) return `Provincia de ${location.province}`;
+  return '';
 }
 
 export function getLocationFromPostalCode(postalCode: string): { city: string; province: string } {
   const location = lookupPostalCodeLocation(postalCode);
+  const province = location?.province || '';
   return {
-    city: location?.municipality || '',
-    province: location?.province || '',
+    city: province ? `Provincia de ${province}` : '',
+    province,
   };
 }
 

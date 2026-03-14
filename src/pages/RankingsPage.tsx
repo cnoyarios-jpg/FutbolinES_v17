@@ -78,9 +78,11 @@ export default function RankingsPage() {
     return mode === 'parado' ? 'ELO Delantero Parado' : 'ELO Delantero Movimiento';
   };
 
-  const getPlayerCity = (player: typeof filtered[0]) => {
+  const getPlayerLocation = (player: typeof filtered[0]) => {
+    const province = player.postalCode ? getCityFromPostalCode(player.postalCode) : '';
+    if (player.postalCode && province) return `CP ${player.postalCode} · ${province}`;
+    if (player.postalCode) return `CP ${player.postalCode}`;
     if (player.city) return player.city;
-    if (player.postalCode) return getCityFromPostalCode(player.postalCode);
     return '';
   };
 
@@ -240,7 +242,7 @@ export default function RankingsPage() {
               const div = getDivision(elo);
               const isTop3 = i < 3;
               const medalColors = ['text-accent', 'text-muted-foreground', 'text-secondary'];
-              const playerCity = getPlayerCity(player);
+              const playerLocation = getPlayerLocation(player);
               return (
               <Link key={player.userId} to={`/perfil/${player.userId}`}>
                 <div className={`flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-all border border-border/30 ${isTop3 ? 'border-l-[3px] border-l-primary/50' : ''}`}>
@@ -256,9 +258,7 @@ export default function RankingsPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-muted-foreground">
-                        {playerCity && player.postalCode
-                          ? `${playerCity} · CP ${player.postalCode}`
-                          : playerCity || (player.postalCode ? `CP ${player.postalCode}` : '')}
+                        {playerLocation}
                       </p>
                       {player.preferredPosition && (
                         <span className="rounded-lg bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary capitalize">{player.preferredPosition}</span>

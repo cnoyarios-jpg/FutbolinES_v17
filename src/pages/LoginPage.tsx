@@ -203,7 +203,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   {postalCode.trim() && !/^\d{5}$/.test(postalCode.trim()) && (
                     <p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>
                   )}
-                  {derivedCity && postalCode.length >= 2 && (
+                  {derivedCity && postalCode.length === 5 && (
                     <p className="mt-1 text-xs text-success font-medium">📍 {derivedCity}</p>
                   )}
                 </div>

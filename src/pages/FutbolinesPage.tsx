@@ -39,11 +39,11 @@ export default function FutbolinesPage() {
     if (!venueForm.name.trim()) { toast.error('El nombre del local es obligatorio'); return; }
     if (!venueForm.postalCode.trim() || !/^\d{5}$/.test(venueForm.postalCode.trim())) { toast.error('El código postal debe ser exactamente 5 dígitos'); return; }
 
-    if (!derivedCity) { toast.error('No se encontró municipio para ese código postal'); return; }
+    if (!derivedLocation?.province) { toast.error('No se encontró provincia para ese código postal'); return; }
 
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
-      id: newId, name: venueForm.name, address: venueForm.address || '', city: derivedCity,
+      id: newId, name: venueForm.name, address: venueForm.address || '', city: derivedLocation?.province ? `Provincia de ${derivedLocation.province}` : '',
       postalCode: venueForm.postalCode.trim(), province: derivedLocation?.province,
       photos: [], description: venueForm.description || undefined,
       status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 50,
@@ -105,8 +105,8 @@ export default function FutbolinesPage() {
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
                 <input className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`} placeholder="Ej: 36600" value={venueForm.postalCode} onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 5); setVenueForm(f => ({ ...f, postalCode: val })); }} maxLength={5} inputMode="numeric" />
                 {venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) && (<p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>)}
-                {derivedCity && venueForm.postalCode.length === 5 && (
-                  <p className="mt-1 text-xs text-success font-medium">📍 {derivedCity}{derivedLocation?.province ? ` (${derivedLocation.province})` : ''}</p>
+                {derivedLocation?.province && venueForm.postalCode.length === 5 && (
+                  <p className="mt-1 text-xs text-success font-medium">📍 Provincia de {derivedLocation.province}</p>
                 )}
               </div>
               <div>
