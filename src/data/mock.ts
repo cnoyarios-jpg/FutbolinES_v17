@@ -1806,18 +1806,19 @@ export function finalizeTeamMatch(matchId: string) {
   localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
 }
 
-export function fixTeamMemberConsistency(teamId: string) {
-  const members = getTeamMembers(teamId);
-  const team = MOCK_TEAMS.find(t => t.id === teamId);
-  if (!team) return;
-  if (!members.some(m => m.userId === team.captainId)) {
-    const ranking = MOCK_RANKINGS.find(r => r.userId === team.captainId);
-    addTeamMember({
-      id: `tm_fix_${Date.now()}`, teamId, userId: team.captainId,
-      displayName: ranking?.displayName || 'Capitán', role: 'capitan',
-      joinedAt: team.createdAt, status: 'aceptada',
-    });
-  }
+export function fixTeamMemberConsistency(teamId?: string) {
+  const teamsToFix = teamId ? [MOCK_TEAMS.find(t => t.id === teamId)].filter(Boolean) as Team[] : MOCK_TEAMS;
+  teamsToFix.forEach(team => {
+    const members = getTeamMembers(team.id);
+    if (!members.some(m => m.userId === team.captainId)) {
+      const ranking = MOCK_RANKINGS.find(r => r.userId === team.captainId);
+      addTeamMember({
+        id: `tm_fix_${Date.now()}_${team.id}`, teamId: team.id, userId: team.captainId,
+        displayName: ranking?.displayName || 'Capitán', role: 'capitan',
+        joinedAt: team.createdAt, status: 'aceptada',
+      });
+    }
+  });
 }
 
 // Generate balanced pairs from individual enrollments
