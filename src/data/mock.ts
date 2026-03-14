@@ -1749,36 +1749,22 @@ export function recordEloHistory(userId: string, elo: number, event?: string, po
 export function ensureEloHistory(userId: string) {
   try {
     const all: EloHistoryEntry[] = JSON.parse(localStorage.getItem('futbolines_elo_history') || '[]');
-    if (all.filter(e => e.userId === userId).length >= 5) return;
+    const userEntries = all.filter(e => e.userId === userId);
+    if (userEntries.length > 0) return; // already has real history
+
     const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
     if (!ranking) return;
     
-    // Find registration date
+    // Find registration date — only create a single starting point
     const regUsers = getRegisteredUsers();
     const regUser = regUsers.find(u => u.id === userId);
-    const registrationDate = regUser?.createdAt ? new Date(regUser.createdAt).getTime() : Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const registrationDate = regUser?.createdAt ? new Date(regUser.createdAt).toISOString() : new Date().toISOString();
     
-    const now = Date.now();
-    const startTime = Math.max(registrationDate, now - 90 * 24 * 60 * 60 * 1000);
-    
-    const entries: EloHistoryEntry[] = [];
-    
-    // Generate portero and delantero history, then compute general as their average
-    for (let i = 0; i <= 12; i++) {
-      const t = startTime + (now - startTime) * (i / 12);
-      const progress = i / 12;
-      const noiseP = (Math.random() - 0.5) * 30;
-      const noiseD = (Math.random() - 0.5) * 30;
-      const porteroElo = Math.max(1400, Math.round(1500 + (ranking.asGoalkeeper - 1500) * progress + noiseP * (1 - progress * 0.5)));
-      const delanteroElo = Math.max(1400, Math.round(1500 + (ranking.asForward - 1500) * progress + noiseD * (1 - progress * 0.5)));
-      const generalElo = Math.round((porteroElo + delanteroElo) / 2);
-      
-      entries.push({ userId, elo: porteroElo, date: new Date(t).toISOString(), position: 'portero' });
-      entries.push({ userId, elo: delanteroElo, date: new Date(t).toISOString(), position: 'delantero' });
-      entries.push({ userId, elo: generalElo, date: new Date(t).toISOString(), position: 'general' });
-    }
-    
-    all.push(...entries);
+    // Single entry at registration with initial ELO (no fake progression)
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'portero', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'delantero', event: 'Registro' });
+    all.push({ userId, elo: 1500, date: registrationDate, position: 'general', event: 'Registro' });
+
     localStorage.setItem('futbolines_elo_history', JSON.stringify(all));
   } catch {}
 }
