@@ -50,6 +50,7 @@ interface EloChangeDisplay {
     generalChange: number;
     modeChange: number;
     tableChange: number;
+    tableRawDelta: number;
     totalAppliedChange: number;
     rawChange: number;
     multiplier: number;
