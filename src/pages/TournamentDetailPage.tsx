@@ -472,7 +472,7 @@ export default function TournamentDetailPage() {
           userId: c.userId,
           type: c.rawChange >= 0 ? 'match_win' : 'match_loss',
           description: `${c.rawChange >= 0 ? 'Victoria' : 'Derrota'} en ${tournament.name}`,
-          eloChange: c.totalAppliedChange,
+          eloChange: c.change,
           date: new Date().toISOString(),
         });
       }
