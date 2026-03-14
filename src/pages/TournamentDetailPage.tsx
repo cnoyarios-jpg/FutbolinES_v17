@@ -507,10 +507,10 @@ export default function TournamentDetailPage() {
       const ranking = MOCK_RANKINGS.find(r => r.userId === change.userId);
       if (!ranking) return;
 
-      if (change.position === 'portero') ranking.asGoalkeeper -= change.change;
-      else ranking.asForward -= change.change;
-      // Recalculate general as average
-      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
+      const mode = tournament.playStyle as 'parado' | 'movimiento';
+      const eloKey = getEloKey(change.position as 'portero' | 'delantero', mode);
+      if (ranking[eloKey] != null) ranking[eloKey] -= change.change;
+      recalcGeneralElo(ranking);
 
       // Revert context stats
       recordContextStats(change.userId, tournament.playStyle, tournament.tableBrand, change.won, { revert: true });
