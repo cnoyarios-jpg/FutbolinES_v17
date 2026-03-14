@@ -220,6 +220,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
         {isOwnProfile && (
           <div className="flex gap-1.5">
+            <button onClick={toggleTheme} className="rounded-lg bg-muted p-2" title={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}>
+              {theme === 'dark' ? <Sun className="h-5 w-5 text-accent" /> : <Moon className="h-5 w-5 text-muted-foreground" />}
+            </button>
             <button onClick={() => { setEditPosition(currentUser?.preferredPosition || 'portero'); setEditStyle(currentUser?.preferredStyle || 'parado'); setEditTable(currentUser?.preferredTable || 'Presas'); setShowEditDialog(true); }} className="rounded-lg bg-muted p-2"><Settings className="h-5 w-5 text-muted-foreground" /></button>
             {onLogout && <button onClick={onLogout} className="rounded-lg bg-destructive/10 p-2"><LogOut className="h-5 w-5 text-destructive" /></button>}
           </div>
