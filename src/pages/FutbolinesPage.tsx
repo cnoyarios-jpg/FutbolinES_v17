@@ -36,11 +36,12 @@ export default function FutbolinesPage() {
 
   const handleAddVenue = () => {
     if (!venueForm.name.trim()) { toast.error('El nombre del local es obligatorio'); return; }
-    if (!venueForm.city.trim()) { toast.error('La ciudad es obligatoria'); return; }
+    if (!venueForm.postalCode.trim() || !/^\d{5}$/.test(venueForm.postalCode.trim())) { toast.error('El código postal debe ser exactamente 5 dígitos'); return; }
 
+    const city = derivedCity || venueForm.postalCode;
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
-      id: newId, name: venueForm.name, address: venueForm.address || '', city: venueForm.city,
+      id: newId, name: venueForm.name, address: venueForm.address || '', city,
       photos: [], description: venueForm.description || undefined,
       status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 50,
       verificationCount: 0, createdBy: 'u1', createdAt: new Date().toISOString().split('T')[0],
@@ -53,7 +54,7 @@ export default function FutbolinesPage() {
     };
     MOCK_TABLES.push(newTable);
 
-    setVenueForm({ name: '', city: '', address: '', description: '', tableBrand: 'Presas', tableQuantity: '1', tableCondition: 'buen_estado' });
+    setVenueForm({ name: '', postalCode: '', address: '', description: '', tableBrand: 'Presas', tableQuantity: '1', tableCondition: 'buen_estado' });
     setShowAddVenue(false);
     toast.success('¡Futbolín añadido correctamente!');
     forceUpdate(n => n + 1);
