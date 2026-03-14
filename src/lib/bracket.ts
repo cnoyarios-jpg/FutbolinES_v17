@@ -173,6 +173,16 @@ export function calculateRoundRobinStandings(
 
 // ===== EFFECTIVE RATING =====
 
+/**
+ * Calculates the effective rating for a match context.
+ *
+ * Formula: 0.6 * positionElo + 0.4 * generalElo + modeAdjust + tableAdjust
+ *
+ * - modeAdjust and tableAdjust are small contextual modifiers (NOT full ELO values).
+ *   modeAdjust is clamped to ±180, tableAdjust to ±90.
+ * - A new player with 1500/1500 and 0 adjustments → effective = 1500.
+ * - The total contextual shift is capped at ±120 from the base to prevent inflation.
+ */
 export function calculateEffectiveRating(
   positionElo: number,
   generalElo: number,
@@ -182,12 +192,11 @@ export function calculateEffectiveRating(
   const safeModeAdjust = Number.isFinite(modeAdjust) ? modeAdjust : 0;
   const safeTableAdjust = Number.isFinite(tableAdjust) ? tableAdjust : 0;
 
-  // Base real rating for this context (without specialization boosts)
+  // Weighted base from position and general ELO
   const baseRating = 0.6 * positionElo + 0.4 * generalElo;
 
-  // Context can move expectation, but we cap artificial inflation/deflation.
-  const contextual = baseRating + safeModeAdjust + safeTableAdjust;
-  const contextualCap = 120;
+  // Contextual shift from mode + table, capped at ±120
+  const contextualShift = Math.max(-120, Math.min(120, safeModeAdjust + safeTableAdjust));
 
-  return Math.round(Math.max(baseRating - contextualCap, Math.min(baseRating + contextualCap, contextual)));
+  return Math.round(baseRating + contextualShift);
 }
