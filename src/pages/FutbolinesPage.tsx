@@ -43,7 +43,7 @@ export default function FutbolinesPage() {
 
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
-      id: newId, name: venueForm.name, address: venueForm.address || '', city: derivedCity,
+      id: newId, name: venueForm.name, address: venueForm.address || '', city: derivedLocation?.province ? `Provincia de ${derivedLocation.province}` : '',
       postalCode: venueForm.postalCode.trim(), province: derivedLocation?.province,
       photos: [], description: venueForm.description || undefined,
       status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 50,
