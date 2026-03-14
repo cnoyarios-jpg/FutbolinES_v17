@@ -1184,10 +1184,27 @@ function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
     }
   }
   if (ranking.byTable) {
-    for (const key of Object.keys(ranking.byTable) as Array<keyof typeof ranking.byTable>) {
-      const v = ranking.byTable[key] || 0;
-      (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, v));
-    }
+    normalizeTableAdjustments(ranking);
+  }
+}
+
+/**
+ * Normalize table adjustments to represent RELATIVE performance.
+ * After accumulating raw deltas, we subtract the mean so that:
+ * - positive = better than average on this table
+ * - negative = worse than average on this table
+ * Then clamp each to ±90.
+ */
+export function normalizeTableAdjustments(ranking: { byTable: Partial<Record<string, number>> }) {
+  const keys = Object.keys(ranking.byTable).filter(k => ranking.byTable[k] !== undefined);
+  if (keys.length === 0) return;
+
+  const values = keys.map(k => ranking.byTable[k] || 0);
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+
+  for (const key of keys) {
+    const relative = (ranking.byTable[key] || 0) - mean;
+    (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, Math.round(relative)));
   }
 }
 
