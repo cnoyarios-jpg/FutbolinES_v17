@@ -429,6 +429,21 @@ export default function TournamentDetailPage() {
       if (!ranking) return;
 
       const scaledChange = Math.round(rawChange * eloMultiplier);
+      if (scaledChange === 0) {
+        // Record zero-change entry for display consistency
+        changes.push({
+          userId, displayName, position,
+          previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
+          newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
+          change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
+          generalChange: 0, modeChange: 0, tableChange: 0, totalAppliedChange: 0,
+          rawChange, multiplier: eloMultiplier,
+          baseGeneralElo: context.generalElo, basePositionElo: context.positionElo,
+          modeAdjust: context.modeAdjust, tableAdjust: context.tableAdjust,
+          effectiveElo: context.effectiveElo,
+        });
+        return;
+      }
       const positionChange = Math.round(scaledChange * 0.45);
       const generalChange = Math.round(scaledChange * 0.30);
       const requestedModeChange = Math.round(scaledChange * 0.15);
