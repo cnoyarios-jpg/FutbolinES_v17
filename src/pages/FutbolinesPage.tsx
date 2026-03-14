@@ -99,8 +99,10 @@ export default function FutbolinesPage() {
                 <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ej: Bar El Rincón" value={venueForm.name} onChange={e => setVenueForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ciudad *</label>
-                <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Madrid" value={venueForm.city} onChange={e => setVenueForm(f => ({ ...f, city: e.target.value }))} />
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
+                <input className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`} placeholder="Ej: 36600" value={venueForm.postalCode} onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 5); setVenueForm(f => ({ ...f, postalCode: val })); }} maxLength={5} inputMode="numeric" />
+                {venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) && (<p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>)}
+                {derivedCity && venueForm.postalCode.length >= 2 && (<p className="mt-1 text-xs text-success font-medium">📍 {derivedCity}</p>)}
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dirección (opcional)</label>
