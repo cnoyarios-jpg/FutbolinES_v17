@@ -1346,13 +1346,7 @@ export default function TournamentDetailPage() {
                           {c.multiplier < 1 && (
                             <span>×{c.multiplier} (invitados)</span>
                           )}
-                          {c.contextCoefficient !== 1 && (
-                            <span>×{c.contextCoefficient.toFixed(2)} (contexto)</span>
-                          )}
-                          <span>Aplicado total: <span className="font-semibold text-foreground">{c.totalAppliedChange >= 0 ? `+${c.totalAppliedChange}` : c.totalAppliedChange}</span></span>
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                          <span>Pos: {c.change >= 0 ? `+${c.change}` : c.change}</span>
+                          <span>Pos: <span className="font-semibold text-foreground">{c.change >= 0 ? `+${c.change}` : c.change}</span></span>
                           <span>Gen: {c.generalChange >= 0 ? `+${c.generalChange}` : c.generalChange} ({c.previousGeneral}→{c.newGeneral})</span>
                         </div>
                       </div>
