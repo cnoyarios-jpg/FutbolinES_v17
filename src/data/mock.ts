@@ -1175,7 +1175,157 @@ export function persistPairs() {
   localStorage.setItem(PAIRS_OVERRIDES_KEY, JSON.stringify(MOCK_PAIRS));
 }
 
-// Sanitize adjustment values: clamp mode to ±180, table to ±90
+type TablePerformanceStats = {
+  deltaSum: number;
+  matches: number;
+  wins: number;
+  losses: number;
+};
+
+type TablePerformanceStore = Record<string, Partial<Record<TableBrand, TablePerformanceStats>>>;
+
+const TABLE_FULL_CONFIDENCE_MATCHES = 10;
+const TABLE_PERFORMANCE_WEIGHT = 3;
+const TABLE_ADJUST_SCALE = 25;
+
+function clampTableAdjust(value: number) {
+  return Math.max(-90, Math.min(90, Math.round(value)));
+}
+
+function getTablePerformanceStore(): TablePerformanceStore {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TABLE_PERFORMANCE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTablePerformanceStore(store: TablePerformanceStore) {
+  localStorage.setItem(TABLE_PERFORMANCE_KEY, JSON.stringify(store));
+}
+
+function ensureSeededTablePerformance(
+  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
+  store: TablePerformanceStore
+) {
+  const existing = store[ranking.userId];
+  if (existing && Object.keys(existing).length > 0) return;
+
+  const seeded: Partial<Record<TableBrand, TablePerformanceStats>> = {};
+  (Object.entries(ranking.byTable) as [TableBrand, number | undefined][]).forEach(([table, value]) => {
+    const safe = Number.isFinite(value) ? Number(value) : 0;
+    if (safe === 0) return;
+
+    // Seed with low confidence so historical values don't dominate and real results can correct quickly.
+    const matches = Math.max(2, Math.min(4, Math.round(Math.abs(safe) / 45) + 2));
+    const score = safe / TABLE_ADJUST_SCALE;
+    const deltaSum = score * matches;
+    const wins = score > 0 ? Math.ceil(matches * 0.6) : score < 0 ? Math.floor(matches * 0.4) : Math.round(matches / 2);
+    const losses = Math.max(0, matches - wins);
+
+    seeded[table] = { deltaSum, matches, wins, losses };
+  });
+
+  if (Object.keys(seeded).length > 0) {
+    store[ranking.userId] = seeded;
+  }
+}
+
+function recomputeTableAdjustments(
+  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
+  store: TablePerformanceStore
+) {
+  const playerStats = store[ranking.userId] || {};
+  const entries = (Object.entries(playerStats) as [TableBrand, TablePerformanceStats | undefined][])
+    .filter(([, stats]) => stats && stats.matches > 0) as [TableBrand, TablePerformanceStats][];
+
+  if (entries.length === 0) {
+    (Object.keys(ranking.byTable) as TableBrand[]).forEach((table) => {
+      ranking.byTable[table] = 0;
+    });
+    return;
+  }
+
+  const totalDelta = entries.reduce((sum, [, stats]) => sum + stats.deltaSum, 0);
+  const totalMatches = entries.reduce((sum, [, stats]) => sum + stats.matches, 0);
+  const totalWins = entries.reduce((sum, [, stats]) => sum + stats.wins, 0);
+
+  const globalDeltaPerMatch = totalMatches > 0 ? totalDelta / totalMatches : 0;
+  const globalWinRate = totalMatches > 0 ? totalWins / totalMatches : 0.5;
+
+  const tableKeys = new Set<TableBrand>([
+    ...(Object.keys(ranking.byTable) as TableBrand[]),
+    ...(entries.map(([table]) => table) as TableBrand[]),
+  ]);
+
+  tableKeys.forEach((table) => {
+    const stats = playerStats[table];
+    if (!stats || stats.matches <= 0) {
+      ranking.byTable[table] = 0;
+      return;
+    }
+
+    const tableDeltaPerMatch = stats.deltaSum / stats.matches;
+    const tableWinRate = stats.wins / stats.matches;
+
+    const deltaDiff = tableDeltaPerMatch - globalDeltaPerMatch;
+    const winRateDiff = tableWinRate - globalWinRate;
+    const confidence = Math.min(stats.matches / TABLE_FULL_CONFIDENCE_MATCHES, 1);
+
+    const relativeScore = deltaDiff + (winRateDiff * TABLE_PERFORMANCE_WEIGHT);
+    ranking.byTable[table] = clampTableAdjust(relativeScore * TABLE_ADJUST_SCALE * confidence);
+  });
+}
+
+export function applyTableAdjustmentDelta(
+  ranking: { userId: string; byTable: Partial<Record<TableBrand, number>> },
+  userId: string,
+  tableBrand: TableBrand,
+  delta: number,
+  options?: { revert?: boolean }
+): number {
+  const previousAdjust = ranking.byTable[tableBrand] || 0;
+  if (!Number.isFinite(delta) || delta === 0) return 0;
+
+  const store = getTablePerformanceStore();
+  ensureSeededTablePerformance(ranking, store);
+
+  if (!store[userId]) store[userId] = {};
+  if (!store[userId][tableBrand]) {
+    store[userId][tableBrand] = { deltaSum: 0, matches: 0, wins: 0, losses: 0 };
+  }
+
+  const stats = store[userId][tableBrand]!;
+
+  if (options?.revert) {
+    stats.deltaSum -= delta;
+    stats.matches = Math.max(0, stats.matches - 1);
+    if (delta > 0) stats.wins = Math.max(0, stats.wins - 1);
+    if (delta < 0) stats.losses = Math.max(0, stats.losses - 1);
+  } else {
+    stats.deltaSum += delta;
+    stats.matches += 1;
+    if (delta > 0) stats.wins += 1;
+    if (delta < 0) stats.losses += 1;
+  }
+
+  if (stats.matches === 0) {
+    delete store[userId][tableBrand];
+  }
+
+  if (Object.keys(store[userId]).length === 0) {
+    delete store[userId];
+  }
+
+  recomputeTableAdjustments(ranking, store);
+  saveTablePerformanceStore(store);
+
+  const nextAdjust = ranking.byTable[tableBrand] || 0;
+  return nextAdjust - previousAdjust;
+}
+
+// Sanitize adjustment values: clamp mode to ±180, table to ±90 (relative by performance store)
 function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
   if (ranking.byStyle) {
     for (const key of Object.keys(ranking.byStyle) as Array<keyof typeof ranking.byStyle>) {
@@ -1189,22 +1339,22 @@ function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
 }
 
 /**
- * Normalize table adjustments to represent RELATIVE performance.
- * After accumulating raw deltas, we subtract the mean so that:
- * - positive = better than average on this table
- * - negative = worse than average on this table
- * Then clamp each to ±90.
+ * Recompute table adjustments from stored performance (fallback: just clamp legacy values).
  */
-export function normalizeTableAdjustments(ranking: { byTable: Partial<Record<string, number>> }) {
-  const keys = Object.keys(ranking.byTable).filter(k => ranking.byTable[k] !== undefined);
-  if (keys.length === 0) return;
+export function normalizeTableAdjustments(ranking: { userId?: string; byTable: Partial<Record<string, number>> }) {
+  if (ranking.userId) {
+    const typedRanking = ranking as { userId: string; byTable: Partial<Record<TableBrand, number>> };
+    const store = getTablePerformanceStore();
+    ensureSeededTablePerformance(typedRanking, store);
+    recomputeTableAdjustments(typedRanking, store);
+    saveTablePerformanceStore(store);
+    return;
+  }
 
-  const values = keys.map(k => ranking.byTable[k] || 0);
-  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-
+  const keys = Object.keys(ranking.byTable).filter((k) => ranking.byTable[k] !== undefined);
   for (const key of keys) {
-    const relative = (ranking.byTable[key] || 0) - mean;
-    (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, Math.round(relative)));
+    const value = ranking.byTable[key] || 0;
+    (ranking.byTable as any)[key] = clampTableAdjust(value);
   }
 }
 
