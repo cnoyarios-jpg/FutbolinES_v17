@@ -256,7 +256,9 @@ export default function RankingsPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px] text-muted-foreground">
-                        {playerCity}{player.postalCode ? ` · ${player.postalCode}` : ''}
+                        {playerCity && player.postalCode
+                          ? `${playerCity} · CP ${player.postalCode}`
+                          : playerCity || (player.postalCode ? `CP ${player.postalCode}` : '')}
                       </p>
                       {player.preferredPosition && (
                         <span className="rounded-lg bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary capitalize">{player.preferredPosition}</span>

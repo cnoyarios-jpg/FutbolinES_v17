@@ -40,6 +40,8 @@ export interface Venue {
   name: string;
   address: string;
   city: string;
+  postalCode?: string;
+  province?: string;
   photos: string[];
   description?: string;
   observations?: string;

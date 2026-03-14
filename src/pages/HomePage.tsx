@@ -57,11 +57,8 @@ export default function HomePage() {
         )}
 
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3">
             <h2 className="font-display text-base font-bold">Futbolines cerca</h2>
-            <Link to="/mapa" className="flex items-center gap-0.5 text-xs font-bold text-primary hover:text-primary/80 transition">
-              Ver mapa <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
           </div>
           <div className="flex flex-col gap-3">
             {featuredVenues.map(v => (
