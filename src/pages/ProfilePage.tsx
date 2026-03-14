@@ -309,7 +309,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       )}
 
       {/* ELO Evolution Chart */}
-      {eloChartData.length >= 2 && (
+      {eloChartData.length > 0 && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-display text-sm font-semibold flex items-center gap-1.5">📈 Evolución ELO</h3>
@@ -345,7 +345,15 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                 />
-                <Line type="monotone" dataKey="elo" stroke={eloPositionFilter === 'portero' ? 'hsl(var(--primary))' : eloPositionFilter === 'delantero' ? 'hsl(var(--secondary))' : 'hsl(var(--primary))'} strokeWidth={2} dot={false} name={eloPositionFilter === 'portero' ? 'ELO Portero' : eloPositionFilter === 'delantero' ? 'ELO Delantero' : 'ELO General'} />
+                <Line
+                  type="monotone"
+                  dataKey="elo"
+                  stroke={eloPositionFilter === 'portero' ? 'hsl(var(--primary))' : eloPositionFilter === 'delantero' ? 'hsl(var(--secondary))' : 'hsl(var(--primary))'}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 3 }}
+                  name={eloPositionFilter === 'portero' ? 'ELO Portero' : eloPositionFilter === 'delantero' ? 'ELO Delantero' : 'ELO General'}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
