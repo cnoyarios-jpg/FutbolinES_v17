@@ -1686,15 +1686,18 @@ export function getTeamJoinRequests(teamId: string): JoinRequest[] {
   } catch { return []; }
 }
 
-export function createJoinRequest(teamId: string, userId: string, displayName: string): JoinRequest {
+export function createJoinRequest(teamId: string, userId: string, displayName: string): { success: boolean; error?: string } {
   const all: JoinRequest[] = JSON.parse(localStorage.getItem(JOIN_REQUESTS_KEY) || '[]');
+  if (all.some(r => r.teamId === teamId && r.userId === userId && r.status === 'pendiente')) {
+    return { success: false, error: 'Ya tienes una solicitud pendiente' };
+  }
   const req: JoinRequest = {
     id: `jr_${Date.now()}`, teamId, userId, displayName,
     status: 'pendiente', createdAt: new Date().toISOString(),
   };
   all.push(req);
   localStorage.setItem(JOIN_REQUESTS_KEY, JSON.stringify(all));
-  return req;
+  return { success: true };
 }
 
 export function respondJoinRequest(requestId: string, accept: boolean) {
