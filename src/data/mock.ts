@@ -1175,14 +1175,30 @@ export function persistPairs() {
   localStorage.setItem(PAIRS_OVERRIDES_KEY, JSON.stringify(MOCK_PAIRS));
 }
 
+// Sanitize adjustment values: clamp mode to ±180, table to ±90
+function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
+  if (ranking.byStyle) {
+    for (const key of Object.keys(ranking.byStyle) as Array<keyof typeof ranking.byStyle>) {
+      const v = ranking.byStyle[key] || 0;
+      ranking.byStyle[key] = Math.max(-180, Math.min(180, v));
+    }
+  }
+  if (ranking.byTable) {
+    for (const key of Object.keys(ranking.byTable) as Array<keyof typeof ranking.byTable>) {
+      const v = ranking.byTable[key] || 0;
+      (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, v));
+    }
+  }
+}
+
 // Restore rankings overrides
 try {
   const savedRankings = localStorage.getItem(RANKINGS_OVERRIDES_KEY);
   if (savedRankings) {
     const parsed = JSON.parse(savedRankings);
     if (Array.isArray(parsed)) {
-      // Merge: update existing entries + add new ones
       parsed.forEach((saved: typeof MOCK_RANKINGS[0]) => {
+        sanitizeAdjustments(saved);
         const idx = MOCK_RANKINGS.findIndex(r => r.userId === saved.userId);
         if (idx >= 0) {
           Object.assign(MOCK_RANKINGS[idx], saved);
@@ -1193,6 +1209,9 @@ try {
     }
   }
 } catch {}
+
+// Also sanitize the hardcoded mock data
+MOCK_RANKINGS.forEach(sanitizeAdjustments);
 
 // Restore tournament overrides
 try {
