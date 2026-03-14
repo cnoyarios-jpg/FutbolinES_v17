@@ -36,10 +36,18 @@ const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
 const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 
 // ===== POSTAL CODE → CITY MAPPING =====
-import { lookupPostalCode } from '@/data/postalCodes';
+import { estimatePostalCodeDistance, lookupPostalCode, lookupPostalCodeLocation } from '@/data/postalCodes';
 
 export function getCityFromPostalCode(postalCode: string): string {
   return lookupPostalCode(postalCode);
+}
+
+export function getLocationFromPostalCode(postalCode: string): { city: string; province: string } {
+  const location = lookupPostalCodeLocation(postalCode);
+  return {
+    city: location?.municipality || '',
+    province: location?.province || '',
+  };
 }
 
 export function getRegisteredUsers(): RegisteredUser[] {
