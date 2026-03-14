@@ -765,18 +765,16 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
       ranking.mvpCount = (ranking.mvpCount || 0) + 1;
 
       if (!hasGuestsInTournament) {
-        // MVP ELO bonus - simple distribution to 3 real ELOs
+        // MVP ELO bonus — only update position played, then recalc general as average
         const mvpBonus = getTournamentMVPBonus(tournamentId);
         const mvpPair = mvpPairs.find(p => p.goalkeeper.userId === mvpUserId || p.forward.userId === mvpUserId);
         const mvpPosition: 'portero' | 'delantero' = mvpPair?.goalkeeper.userId === mvpUserId ? 'portero' : 'delantero';
-        
-        const posChange = Math.round(mvpBonus * 0.6);
-        const genChange = mvpBonus - posChange;
 
-        // Only update general + position ELO
-        ranking.general += genChange;
-        if (mvpPosition === 'portero') ranking.asGoalkeeper += posChange;
-        else ranking.asForward += posChange;
+        if (mvpPosition === 'portero') ranking.asGoalkeeper += mvpBonus;
+        else ranking.asForward += mvpBonus;
+
+        // General = always the average
+        ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
 
         recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
