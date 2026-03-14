@@ -25,6 +25,7 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const { userId } = useParams();
+  const { theme, toggleTheme } = useTheme();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
   const [eloPositionFilter, setEloPositionFilter] = useState<'general' | 'portero' | 'delantero'>('general');
