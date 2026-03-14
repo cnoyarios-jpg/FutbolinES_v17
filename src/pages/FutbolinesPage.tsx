@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, Plus, X } from 'lucide-react';
-import { MOCK_VENUES, MOCK_TABLES, getTableForVenue, TABLE_CONDITION_LABELS, TABLE_CONDITION_COLORS } from '@/data/mock';
+import { MOCK_VENUES, MOCK_TABLES, getTableForVenue, TABLE_CONDITION_LABELS, TABLE_CONDITION_COLORS, getCityFromPostalCode } from '@/data/mock';
 import VenueCard from '@/components/VenueCard';
 import PageShell from '@/components/PageShell';
 import { TableBrand, TableCondition, Venue, VenueTable } from '@/types';
