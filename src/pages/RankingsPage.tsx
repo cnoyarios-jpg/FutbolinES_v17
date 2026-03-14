@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamStats, isGuestPlayer, getSeasons, createSeason, getActiveSeason, getTeamRanking } from '@/data/mock';
+import { MOCK_RANKINGS, MOCK_TEAMS, MOCK_VENUES, MOCK_TOURNAMENTS, MOCK_PAIRS, getAllPairRankings, getVenueRankings, getTeamRanking, isGuestPlayer, getCityFromPostalCode } from '@/data/mock';
 import { getDivision, DIVISION_DEFS, getSubdivisionRanges } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
-import { Trophy, Shield, Target, Users, Handshake, MapPin, Search, Filter, X, Calendar, Plus, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Trophy, Shield, Target, Users, Handshake, MapPin, Filter, X, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { TableBrand } from '@/types';
-import { toast } from 'sonner';
 
 type RankingTab = 'individual' | 'parejas' | 'equipos' | 'bares';
 type RankingView = 'general' | 'porteros' | 'delanteros';
@@ -20,19 +19,8 @@ export default function RankingsPage() {
   const [mode, setMode] = useState<RankingMode>('parado');
   const [showFilters, setShowFilters] = useState(false);
   const [showDivisionInfo, setShowDivisionInfo] = useState(false);
-  const [, forceUpdate] = useState(0);
 
-  // Season state
-  const [showSeasonDialog, setShowSeasonDialog] = useState(false);
-  const [seasonName, setSeasonName] = useState('');
-  const [seasonStart, setSeasonStart] = useState('');
-  const [seasonEnd, setSeasonEnd] = useState('');
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
-
-  const seasons = getSeasons();
-  const activeSeason = getActiveSeason();
-
-  // Filters (no position filter - it's in the nav)
+  // Filters
   const [filterTable, setFilterTable] = useState<string>('');
   const [filterPostalCode, setFilterPostalCode] = useState('');
   const [filterVenue, setFilterVenue] = useState<string>('');
@@ -43,18 +31,6 @@ export default function RankingsPage() {
     setFilterTable('');
     setFilterPostalCode('');
     setFilterVenue('');
-  };
-
-  const handleCreateSeason = () => {
-    if (!seasonName.trim() || !seasonStart || !seasonEnd) {
-      toast.error('Nombre, fecha inicio y fecha fin son obligatorios');
-      return;
-    }
-    createSeason(seasonName, seasonStart, seasonEnd);
-    setSeasonName(''); setSeasonStart(''); setSeasonEnd('');
-    setShowSeasonDialog(false);
-    toast.success('Temporada creada');
-    forceUpdate(n => n + 1);
   };
 
   const getVenuePlayerIds = (venueId: string): Set<string> => {
@@ -68,38 +44,9 @@ export default function RankingsPage() {
     return ids;
   };
 
-  const getSeasonTournamentIds = (): Set<string> | null => {
-    const seasonId = selectedSeasonId || activeSeason?.id;
-    if (!seasonId) return null;
-    const season = seasons.find(s => s.id === seasonId);
-    if (!season) return null;
-    const ids = new Set<string>();
-    MOCK_TOURNAMENTS.forEach(t => {
-      if (t.date >= season.startDate && t.date <= season.endDate) ids.add(t.id);
-    });
-    return ids;
-  };
-
-  const getSeasonPlayerIds = (): Set<string> | null => {
-    const tournamentIds = getSeasonTournamentIds();
-    if (!tournamentIds) return null;
-    const playerIds = new Set<string>();
-    MOCK_PAIRS.forEach(p => {
-      if (tournamentIds.has(p.tournamentId)) {
-        playerIds.add(p.goalkeeper.userId);
-        playerIds.add(p.forward.userId);
-      }
-    });
-    return playerIds;
-  };
-
   const registeredOnly = MOCK_RANKINGS.filter(r => r.playerType !== 'invitado');
 
   let filtered = registeredOnly;
-  const seasonPlayerIds = getSeasonPlayerIds();
-  if (seasonPlayerIds) {
-    filtered = filtered.filter(r => seasonPlayerIds.has(r.userId));
-  }
   if (filterTable) {
     filtered = filtered.filter(r => r.preferredTable === filterTable);
   }
@@ -118,7 +65,6 @@ export default function RankingsPage() {
         ? (player.goalkeeperStill ?? player.asGoalkeeper) 
         : (player.goalkeeperMoving ?? player.asGoalkeeper);
     }
-    // delanteros
     return mode === 'parado' 
       ? (player.forwardStill ?? player.asForward) 
       : (player.forwardMoving ?? player.asForward);
@@ -132,6 +78,12 @@ export default function RankingsPage() {
     return mode === 'parado' ? 'ELO Delantero Parado' : 'ELO Delantero Movimiento';
   };
 
+  const getPlayerCity = (player: typeof filtered[0]) => {
+    if (player.city) return player.city;
+    if (player.postalCode) return getCityFromPostalCode(player.postalCode);
+    return '';
+  };
+
   const pairRankings = getAllPairRankings();
   const venueRankings = getVenueRankings();
   const teamRanking = getTeamRanking();
@@ -139,33 +91,8 @@ export default function RankingsPage() {
 
   return (
     <PageShell title="Ranking">
-      {/* Season selector */}
-      {(seasons.length > 0 || tab === 'individual') && (
-        <div className="mb-3 flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-          <select
-            value={selectedSeasonId}
-            onChange={e => { setSelectedSeasonId(e.target.value); forceUpdate(n => n + 1); }}
-            className="flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="">Todas las temporadas</option>
-            {seasons.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name} {s.isActive ? '(actual)' : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => setShowSeasonDialog(true)}
-            className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs font-medium text-muted-foreground"
-          >
-            <Plus className="h-3 w-3" /> Nueva
-          </button>
-        </div>
-      )}
-
-      {/* Row 1: Tab selector */}
-      <div className="mb-3 flex gap-1 overflow-x-auto">
+      {/* Row 1: Category tabs */}
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-0.5">
         {([
           { key: 'individual' as const, label: 'Individual', icon: Trophy },
           { key: 'parejas' as const, label: 'Parejas', icon: Handshake },
@@ -173,7 +100,7 @@ export default function RankingsPage() {
           { key: 'bares' as const, label: 'Bares', icon: MapPin },
         ]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition whitespace-nowrap ${tab === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-all whitespace-nowrap ${tab === key ? 'bg-primary text-primary-foreground shadow-md' : 'bg-card text-muted-foreground border border-border/50 hover:bg-muted'}`}>
             <Icon className="h-3.5 w-3.5" />{label}
           </button>
         ))}
@@ -183,19 +110,19 @@ export default function RankingsPage() {
       {tab === 'individual' && (
         <>
           {/* Row 2: Position view */}
-          <div className="mb-2 flex items-center gap-1.5">
+          <div className="mb-2.5 flex items-center gap-1.5">
             {([
               { key: 'general' as const, label: 'General', icon: Trophy },
               { key: 'porteros' as const, label: 'Porteros', icon: Shield },
               { key: 'delanteros' as const, label: 'Delanteros', icon: Target },
             ]).map(({ key, label, icon: Icon }) => (
               <button key={key} onClick={() => setView(key)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition ${view === key ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${view === key ? 'bg-secondary text-secondary-foreground shadow-md' : 'bg-card text-muted-foreground border border-border/50 hover:bg-muted'}`}>
                 <Icon className="h-3.5 w-3.5" />{label}
               </button>
             ))}
             <button onClick={() => setShowFilters(!showFilters)}
-              className={`ml-auto flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition ${showFilters || hasActiveFilters ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+              className={`ml-auto flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all ${showFilters || hasActiveFilters ? 'bg-primary text-primary-foreground shadow-md' : 'bg-card text-muted-foreground border border-border/50'}`}>
               <Filter className="h-3.5 w-3.5" />
               {hasActiveFilters && <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[9px]">!</span>}
             </button>
@@ -203,10 +130,10 @@ export default function RankingsPage() {
 
           {/* Row 3: Mode selector (only for porteros/delanteros) */}
           {view !== 'general' && (
-            <div className="mb-3 flex gap-1">
+            <div className="mb-3 flex gap-1.5">
               {(['parado', 'movimiento'] as const).map(m => (
                 <button key={m} onClick={() => setMode(m)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition ${mode === m ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                  className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all ${mode === m ? 'bg-accent text-accent-foreground shadow-md' : 'bg-card text-muted-foreground border border-border/50 hover:bg-muted'}`}>
                   {m === 'parado' ? '🧱 Parado' : '💨 Movimiento'}
                 </button>
               ))}
@@ -216,7 +143,7 @@ export default function RankingsPage() {
           {/* Division info */}
           <button
             onClick={() => setShowDivisionInfo(!showDivisionInfo)}
-            className="mb-3 w-full flex items-center justify-between rounded-lg bg-card p-3 shadow-card text-xs font-medium text-muted-foreground hover:bg-muted/80 transition"
+            className="mb-3 w-full flex items-center justify-between rounded-xl bg-card p-3.5 shadow-card text-xs font-medium text-muted-foreground hover:bg-muted/60 transition border border-border/30"
           >
             <div className="flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5" />
@@ -225,13 +152,13 @@ export default function RankingsPage() {
             {showDivisionInfo ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
           {showDivisionInfo && (
-            <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
-              <h4 className="text-xs font-semibold text-foreground mb-3">Sistema de Divisiones</h4>
+            <div className="mb-4 rounded-2xl bg-card p-4 shadow-elevated border border-border/30">
+              <h4 className="text-xs font-bold text-foreground mb-3">Sistema de Divisiones</h4>
               <div className="flex flex-col gap-2">
                 {DIVISION_DEFS.map(d => {
                   const subs = getSubdivisionRanges(d);
                   return (
-                    <div key={d.name} className="rounded-lg bg-muted p-3">
+                    <div key={d.name} className="rounded-xl bg-muted/60 p-3">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
                           <DivisionIcon iconName={d.iconName} className="h-5 w-5" />
@@ -258,11 +185,11 @@ export default function RankingsPage() {
             </div>
           )}
 
-          {/* Filters panel (no position filter) */}
+          {/* Filters panel */}
           {showFilters && (
-            <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
+            <div className="mb-4 rounded-2xl bg-card p-4 shadow-elevated border border-border/30">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Filter className="h-3.5 w-3.5" /> Filtros
                 </h4>
                 {hasActiveFilters && (
@@ -272,27 +199,24 @@ export default function RankingsPage() {
                 )}
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {/* Table filter */}
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Mesa</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Mesa</label>
                   <select value={filterTable} onChange={e => setFilterTable(e.target.value)}
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
+                    className="w-full rounded-xl border border-input bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="">Todas</option>
                     {TABLE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
-                {/* Postal code filter */}
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Código postal</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Código postal</label>
                   <input value={filterPostalCode} onChange={e => setFilterPostalCode(e.target.value)}
                     placeholder="Ej: 28"
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
+                    className="w-full rounded-xl border border-input bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
-                {/* Venue filter */}
                 <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Bar</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Bar</label>
                   <select value={filterVenue} onChange={e => setFilterVenue(e.target.value)}
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
+                    className="w-full rounded-xl border border-input bg-background px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="">Todos</option>
                     {activeVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
@@ -305,7 +229,7 @@ export default function RankingsPage() {
           )}
 
           {/* Current view label */}
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{getEloLabel()}</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5">{getEloLabel()}</p>
 
           <div className="flex flex-col gap-2.5">
             {sorted.length === 0 && (
@@ -316,10 +240,11 @@ export default function RankingsPage() {
               const div = getDivision(elo);
               const isTop3 = i < 3;
               const medalColors = ['text-accent', 'text-muted-foreground', 'text-secondary'];
+              const playerCity = getPlayerCity(player);
               return (
               <Link key={player.userId} to={`/perfil/${player.userId}`}>
-                <div className={`flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-all border border-border/30 ${isTop3 ? 'border-l-2 border-l-primary/40' : ''}`}>
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${isTop3 ? 'bg-primary/10 ' + medalColors[i] : 'bg-muted text-muted-foreground'}`}>
+                <div className={`flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-all border border-border/30 ${isTop3 ? 'border-l-[3px] border-l-primary/50' : ''}`}>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold ${isTop3 ? 'bg-primary/10 ' + medalColors[i] : 'bg-muted text-muted-foreground'}`}>
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -330,7 +255,9 @@ export default function RankingsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-[10px] text-muted-foreground">{player.city || ''}{player.postalCode ? ` · ${player.postalCode}` : ''}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {playerCity}{player.postalCode ? ` · ${player.postalCode}` : ''}
+                      </p>
                       {player.preferredPosition && (
                         <span className="rounded-lg bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary capitalize">{player.preferredPosition}</span>
                       )}
@@ -353,15 +280,15 @@ export default function RankingsPage() {
 
       {/* === PAREJAS === */}
       {tab === 'parejas' && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {pairRankings.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No hay historial de parejas aún.</p>}
           {pairRankings.map((pr, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card">
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : i === 1 ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <div key={i} className="flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card border border-border/30">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
                 {i + 1}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{pr.goalkeeperName} / {pr.forwardName}</p>
+                <p className="text-sm font-bold truncate">{pr.goalkeeperName} / {pr.forwardName}</p>
                 <div className="flex gap-2 mt-0.5 text-[10px] text-muted-foreground">
                   <span className="text-success">{pr.wins}V</span>
                   <span className="text-destructive">{pr.losses}D</span>
@@ -380,16 +307,16 @@ export default function RankingsPage() {
 
       {/* === EQUIPOS === */}
       {tab === 'equipos' && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {teamRanking.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No hay equipos registrados.</p>}
           {teamRanking.map((team, i) => (
             <Link key={team.id} to={`/equipos/${team.id}`}>
-              <div className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card hover:shadow-elevated transition-shadow">
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+              <div className="flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-shadow border border-border/30">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{team.name}</p>
+                  <p className="text-sm font-bold truncate">{team.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
                     <MapPin className="h-3 w-3" />{team.city}
                     <span className="text-success">{team.stats.wins}V</span>
@@ -409,16 +336,16 @@ export default function RankingsPage() {
 
       {/* === BARES === */}
       {tab === 'bares' && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {venueRankings.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No hay bares con actividad.</p>}
           {venueRankings.map((v, i) => (
             <Link key={v.venueId} to={`/locales/${v.venueId}`}>
-              <div className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-card hover:shadow-elevated transition-shadow">
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+              <div className="flex items-center gap-3 rounded-2xl bg-card p-3.5 shadow-card hover:shadow-elevated transition-shadow border border-border/30">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold ${i === 0 ? 'bg-accent/20 text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{v.name}</p>
+                  <p className="text-sm font-bold truncate">{v.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
                     <MapPin className="h-3 w-3" />{v.city}
                     <span>· {v.tournamentCount} torneos</span>
@@ -432,42 +359,6 @@ export default function RankingsPage() {
               </div>
             </Link>
           ))}
-        </div>
-      )}
-
-      {/* CREATE SEASON DIALOG */}
-      {showSeasonDialog && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-xl bg-card p-6 shadow-elevated">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-lg font-bold">Nueva temporada</h3>
-              <button onClick={() => setShowSeasonDialog(false)}><X className="h-5 w-5 text-muted-foreground" /></button>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nombre *</label>
-                <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Ej: Temporada 2026" value={seasonName} onChange={e => setSeasonName(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inicio *</label>
-                  <input type="date" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={seasonStart} onChange={e => setSeasonStart(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fin *</label>
-                  <input type="date" className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={seasonEnd} onChange={e => setSeasonEnd(e.target.value)} />
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground">La temporada anterior se desactivará automáticamente.</p>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setShowSeasonDialog(false)} className="flex-1 rounded-lg bg-muted py-2.5 text-sm font-medium text-muted-foreground">Cancelar</button>
-              <button onClick={handleCreateSeason} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground">Crear</button>
-            </div>
-          </div>
         </div>
       )}
     </PageShell>

@@ -13,7 +13,7 @@ export default function BottomNav() {
   const location = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-card/80 backdrop-blur-xl safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/30 bg-card/85 backdrop-blur-2xl safe-bottom">
       <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-1.5">
         {NAV_ITEMS.map(({ path, icon: Icon, label }) => {
           const isActive = location.pathname === path;
@@ -27,7 +27,7 @@ export default function BottomNav() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <div className={`rounded-xl p-1.5 transition-all duration-200 ${isActive ? 'bg-primary/10 shadow-glow scale-110' : ''}`}>
+              <div className={`rounded-xl p-1.5 transition-all duration-200 ${isActive ? 'bg-primary/12 shadow-glow scale-110' : ''}`}>
                 <Icon className={`h-5 w-5 transition-all ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
               </div>
               <span className="tracking-wide">{label}</span>

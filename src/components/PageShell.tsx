@@ -11,7 +11,7 @@ export default function PageShell({ children, title, noPadding, noBottomPad }: P
   return (
     <div className={`min-h-screen ${noBottomPad ? '' : 'pb-24'}`}>
       {title && (
-        <header className="sticky top-0 z-40 border-b border-border/30 bg-card/80 backdrop-blur-xl px-5 py-4">
+        <header className="sticky top-0 z-40 border-b border-border/20 bg-card/85 backdrop-blur-2xl px-5 py-4">
           <h1 className="font-display text-lg font-bold tracking-tight">{title}</h1>
         </header>
       )}
