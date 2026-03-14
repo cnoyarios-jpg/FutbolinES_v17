@@ -781,9 +781,10 @@ export function setTournamentMvp(tournamentId: string, mvpUserId: string, mvpNam
         // Layer 3: Mode
         const playStyle = tournament.playStyle;
         ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
-        // Layer 4: Table
+        // Layer 4: Table (accumulate then normalize for relative performance)
         const tableBrand = tournament.tableBrand;
-        ranking.byTable[tableBrand] = Math.max(-90, Math.min(90, (ranking.byTable[tableBrand] || 0) + tableChange));
+        ranking.byTable[tableBrand] = (ranking.byTable[tableBrand] || 0) + tableChange;
+        normalizeTableAdjustments(ranking);
 
         recordEloHistory(mvpUserId, mvpPosition === 'portero' ? ranking.asGoalkeeper : ranking.asForward, 'MVP: ' + tournament.name, mvpPosition);
         recordEloHistory(mvpUserId, ranking.general, 'MVP: ' + tournament.name, 'general');
@@ -1184,10 +1185,27 @@ function sanitizeAdjustments(ranking: typeof MOCK_RANKINGS[0]) {
     }
   }
   if (ranking.byTable) {
-    for (const key of Object.keys(ranking.byTable) as Array<keyof typeof ranking.byTable>) {
-      const v = ranking.byTable[key] || 0;
-      (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, v));
-    }
+    normalizeTableAdjustments(ranking);
+  }
+}
+
+/**
+ * Normalize table adjustments to represent RELATIVE performance.
+ * After accumulating raw deltas, we subtract the mean so that:
+ * - positive = better than average on this table
+ * - negative = worse than average on this table
+ * Then clamp each to ±90.
+ */
+export function normalizeTableAdjustments(ranking: { byTable: Partial<Record<string, number>> }) {
+  const keys = Object.keys(ranking.byTable).filter(k => ranking.byTable[k] !== undefined);
+  if (keys.length === 0) return;
+
+  const values = keys.map(k => ranking.byTable[k] || 0);
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+
+  for (const key of keys) {
+    const relative = (ranking.byTable[key] || 0) - mean;
+    (ranking.byTable as any)[key] = Math.max(-90, Math.min(90, Math.round(relative)));
   }
 }
 

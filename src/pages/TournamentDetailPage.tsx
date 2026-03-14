@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, normalizeTableAdjustments } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
@@ -462,9 +462,10 @@ export default function TournamentDetailPage() {
       const appliedModeChange = nextModeAdjust - previousModeAdjust;
 
       const previousTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      const nextTableAdjust = clamp(previousTableAdjust + requestedTableChange, -90, 90);
-      ranking.byTable[tournament.tableBrand] = nextTableAdjust;
-      const appliedTableChange = nextTableAdjust - previousTableAdjust;
+      // Accumulate raw delta, then normalize for relative performance
+      ranking.byTable[tournament.tableBrand] = (ranking.byTable[tournament.tableBrand] || 0) + requestedTableChange;
+      normalizeTableAdjustments(ranking);
+      const appliedTableChange = (ranking.byTable[tournament.tableBrand] || 0) - previousTableAdjust;
 
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const appliedPositionChange = newElo - previousElo;
@@ -562,7 +563,8 @@ export default function TournamentDetailPage() {
       ranking.byStyle[tournament.playStyle] = clamp(currentModeAdjust - change.modeChange, -180, 180);
 
       const currentTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
-      ranking.byTable[tournament.tableBrand] = clamp(currentTableAdjust - change.tableChange, -90, 90);
+      ranking.byTable[tournament.tableBrand] = (currentTableAdjust - change.tableChange);
+      normalizeTableAdjustments(ranking);
 
       if (change.rawChange > 0) ranking.wins = Math.max(0, ranking.wins - 1);
       if (change.rawChange < 0) ranking.losses = Math.max(0, ranking.losses - 1);

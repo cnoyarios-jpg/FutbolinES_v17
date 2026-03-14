@@ -277,18 +277,25 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                 <div>
                   <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px] mb-1.5">Ajuste por Mesa (±90 máx)</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).map(([table, adj]) => (
-                      <div key={table} className="rounded-lg bg-muted p-2 flex justify-between items-center">
-                        <span className="font-medium">{table}</span>
-                        <span className={`font-bold ${(adj as number || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                          {(adj as number || 0) >= 0 ? '+' : ''}{adj}
-                        </span>
-                      </div>
-                    ))}
-                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0).length === 0 && (
+                    {Object.entries(rating.byTable).filter(([,v]) => v !== undefined).length > 0 ? (
+                      Object.entries(rating.byTable)
+                        .filter(([,v]) => v !== undefined)
+                        .sort(([,a],[,b]) => (b as number || 0) - (a as number || 0))
+                        .map(([table, adj]) => (
+                          <div key={table} className="rounded-lg bg-muted p-2 flex justify-between items-center">
+                            <span className="font-medium">{table}</span>
+                            <span className={`font-bold ${(adj as number || 0) > 0 ? 'text-success' : (adj as number || 0) < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                              {(adj as number || 0) > 0 ? '+' : ''}{adj}
+                            </span>
+                          </div>
+                        ))
+                    ) : (
                       <p className="text-muted-foreground col-span-2 italic">Sin datos de mesa</p>
                     )}
                   </div>
+                  <p className="text-[9px] text-muted-foreground mt-1 italic">
+                    Valores relativos: positivo = mejor que tu media, negativo = peor que tu media en esa mesa.
+                  </p>
                 </div>
                 {/* Effective Rating Formula */}
                 <div className="rounded-lg bg-primary/5 p-2.5 border border-primary/10">
@@ -301,13 +308,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   </p>
                   {/* Effective ratings per position × mode, showing best table too */}
                   {(() => {
-                    const tableEntries = Object.entries(rating.byTable).filter(([,v]) => v !== undefined && v !== 0);
-                    const bestTableAdj = tableEntries.length > 0
-                      ? Math.max(...tableEntries.map(([,v]) => Math.max(-90, Math.min(90, v as number || 0))))
-                      : 0;
-                    const bestTableName = tableEntries.length > 0
-                      ? tableEntries.find(([,v]) => Math.max(-90, Math.min(90, v as number || 0)) === bestTableAdj)?.[0] || ''
-                      : '';
+                    const tableEntries = Object.entries(rating.byTable)
+                      .filter(([,v]) => v !== undefined)
+                      .sort(([,a],[,b]) => (b as number || 0) - (a as number || 0));
 
                     return (
                       <div className="mt-2 space-y-1.5 text-[10px]">
@@ -317,6 +320,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                           return (['parado', 'movimiento'] as const).map(style => {
                             const modeAdj = Math.max(-180, Math.min(180, rating.byStyle[style] || 0));
                             const base = Math.round(0.6 * posElo + 0.4 * rating.general);
+                            // Show with best table and worst table for contrast
+                            const bestTableAdj = tableEntries.length > 0 ? Math.max(-90, Math.min(90, tableEntries[0][1] as number || 0)) : 0;
+                            const bestTableName = tableEntries.length > 0 ? tableEntries[0][0] : '';
                             const effective = Math.round(0.6 * posElo + 0.4 * rating.general + modeAdj + bestTableAdj);
                             return (
                               <div key={`${pos}-${style}`} className="rounded bg-muted px-2 py-1.5 flex justify-between items-center">
