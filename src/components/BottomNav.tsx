@@ -13,25 +13,24 @@ export default function BottomNav() {
   const location = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-md safe-bottom">
-      <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/80 backdrop-blur-xl safe-bottom">
+      <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-1.5">
         {NAV_ITEMS.map(({ path, icon: Icon, label }) => {
           const isActive = location.pathname === path;
           return (
             <Link
               key={path}
               to={path}
-              className={`relative flex flex-col items-center gap-0.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+              className={`relative flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-all ${
                 isActive
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Icon className={`h-5 w-5 ${isActive ? 'stroke-[2.5]' : ''}`} />
+              <div className={`rounded-lg p-1 transition-colors ${isActive ? 'bg-primary/10' : ''}`}>
+                <Icon className={`h-5 w-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+              </div>
               <span>{label}</span>
-              {isActive && (
-                <span className="absolute -top-0 h-0.5 w-6 rounded-full bg-primary" />
-              )}
             </Link>
           );
         })}

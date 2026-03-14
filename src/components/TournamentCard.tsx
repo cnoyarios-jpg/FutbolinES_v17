@@ -1,5 +1,5 @@
 import { Tournament } from '@/types';
-import { Calendar, MapPin, Users, Trophy } from 'lucide-react';
+import { Calendar, MapPin, Users } from 'lucide-react';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { calculateTournamentAvgElo } from '@/data/mock';
@@ -21,10 +21,10 @@ const formatLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
   borrador: 'bg-muted text-muted-foreground',
-  abierto: 'bg-success text-success-foreground',
-  en_curso: 'bg-secondary text-secondary-foreground',
+  abierto: 'bg-success/15 text-success border border-success/20',
+  en_curso: 'bg-secondary/15 text-secondary border border-secondary/20',
   finalizado: 'bg-muted text-muted-foreground',
-  cancelado: 'bg-destructive text-destructive-foreground',
+  cancelado: 'bg-destructive/15 text-destructive border border-destructive/20',
 };
 
 const statusLabels: Record<string, string> = {
@@ -43,22 +43,20 @@ export default function TournamentCard({ tournament, onClick }: TournamentCardPr
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-lg bg-card p-4 shadow-card transition-all hover:shadow-elevated active:scale-[0.98]"
+      className="w-full text-left rounded-xl bg-card p-4 shadow-card transition-all hover:shadow-elevated active:scale-[0.98] border border-border/50"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-display font-semibold text-card-foreground truncate">{tournament.name}</h3>
+          <h3 className="font-display font-semibold text-card-foreground truncate">{tournament.name}</h3>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{tournament.tableBrand}</span>
+            <span className="rounded-lg bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground capitalize">{tournament.playStyle}</span>
+            <span className="rounded-lg bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{formatLabels[tournament.format]}</span>
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{tournament.tableBrand}</span>
-            <span className="rounded-md bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground capitalize">{tournament.playStyle}</span>
-            <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{formatLabels[tournament.format]}</span>
-          </div>
-          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formattedDate}</span>
-            <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{tournament.city}</span>
-            <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tournament.maxPairs}</span>
+          <div className="mt-2.5 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{formattedDate}</span>
+            <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{tournament.city}</span>
+            <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{tournament.maxPairs}</span>
             {(() => {
               const { avgElo, registeredCount } = calculateTournamentAvgElo(tournament.id);
               if (registeredCount < 2) return null;
@@ -67,7 +65,7 @@ export default function TournamentCard({ tournament, onClick }: TournamentCardPr
             })()}
           </div>
         </div>
-        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusColors[tournament.status]}`}>
+        <span className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-semibold ${statusColors[tournament.status]}`}>
           {statusLabels[tournament.status]}
         </span>
       </div>

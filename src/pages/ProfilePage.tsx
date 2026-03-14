@@ -7,10 +7,11 @@ import {
   getRegisteredUsers, getEloHistory, ensureEloHistory, getPlayerRivalries,
   getActivityLog, getNotifications,
 } from '@/data/mock';
-import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity } from 'lucide-react';
+import { Settings, Trophy, Shield, Target, Users, ArrowLeft, LogOut, Star, Flame, X, Handshake, Award, Bell, Swords, Activity, Sun, Moon } from 'lucide-react';
 import { Position, TableBrand } from '@/types';
 import { toast } from 'sonner';
 import AchievementsSection from '@/components/AchievementsSection';
+import { useTheme } from '@/hooks/use-theme';
 import MvpHistorySection from '@/components/MvpHistorySection';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
@@ -24,6 +25,7 @@ interface ProfilePageProps {
 
 export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const { userId } = useParams();
+  const { theme, toggleTheme } = useTheme();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [eloTimeFilter, setEloTimeFilter] = useState<'7d' | '30d' | '3m' | 'all'>('3m');
   const [eloPositionFilter, setEloPositionFilter] = useState<'general' | 'portero' | 'delantero'>('general');
@@ -85,7 +87,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
   const pairHistory = getPairHistory(targetUserId);
 
   const bestTable = rating?.byTable ? Object.entries(rating.byTable).sort(([,a],[,b]) => (b||0) - (a||0))[0] : null;
-  const bestStyle = rating ? (rating.byStyle.parado >= rating.byStyle.movimiento ? 'Parado' : 'Movimiento') : null;
+  const bestStyle = rating ? (rating.byStyle.parado > rating.byStyle.movimiento ? 'Parado' : rating.byStyle.movimiento > rating.byStyle.parado ? 'Movimiento' : preferredStyle ? (preferredStyle === 'parado' ? 'Parado' : 'Movimiento') : 'Parado') : null;
   const bestPosition = rating ? (rating.asGoalkeeper >= rating.asForward ? 'Portero' : 'Delantero') : null;
 
   const wonTournaments = MOCK_TOURNAMENTS.filter(t => {
@@ -218,6 +220,9 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
         </div>
         {isOwnProfile && (
           <div className="flex gap-1.5">
+            <button onClick={toggleTheme} className="rounded-lg bg-muted p-2" title={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}>
+              {theme === 'dark' ? <Sun className="h-5 w-5 text-accent" /> : <Moon className="h-5 w-5 text-muted-foreground" />}
+            </button>
             <button onClick={() => { setEditPosition(currentUser?.preferredPosition || 'portero'); setEditStyle(currentUser?.preferredStyle || 'parado'); setEditTable(currentUser?.preferredTable || 'Presas'); setShowEditDialog(true); }} className="rounded-lg bg-muted p-2"><Settings className="h-5 w-5 text-muted-foreground" /></button>
             {onLogout && <button onClick={onLogout} className="rounded-lg bg-destructive/10 p-2"><LogOut className="h-5 w-5 text-destructive" /></button>}
           </div>
