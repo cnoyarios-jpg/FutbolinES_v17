@@ -9,13 +9,13 @@ interface PageShellProps {
 
 export default function PageShell({ children, title, noPadding, noBottomPad }: PageShellProps) {
   return (
-    <div className={`min-h-screen ${noBottomPad ? '' : 'pb-20'}`}>
+    <div className={`min-h-screen ${noBottomPad ? '' : 'pb-24'}`}>
       {title && (
-        <header className="sticky top-0 z-40 border-b border-border/60 bg-card/80 backdrop-blur-xl px-4 py-3.5">
+        <header className="sticky top-0 z-40 border-b border-border/40 bg-card/85 backdrop-blur-2xl px-5 py-4">
           <h1 className="font-display text-lg font-bold tracking-tight">{title}</h1>
         </header>
       )}
-      <main className={noPadding ? '' : 'px-4 py-4'}>
+      <main className={noPadding ? '' : 'px-5 py-5'}>
         {children}
       </main>
     </div>
