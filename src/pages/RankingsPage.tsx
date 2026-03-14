@@ -10,12 +10,14 @@ import { toast } from 'sonner';
 
 type RankingTab = 'individual' | 'parejas' | 'equipos' | 'bares';
 type RankingView = 'general' | 'porteros' | 'delanteros';
+type RankingMode = 'parado' | 'movimiento';
 
 const TABLE_BRANDS: TableBrand[] = ['Presas', 'Tsunami', 'Infinity', 'Val', 'Garlando', 'Leonhart', 'Tornado', 'Otro'];
 
 export default function RankingsPage() {
   const [tab, setTab] = useState<RankingTab>('individual');
   const [view, setView] = useState<RankingView>('general');
+  const [mode, setMode] = useState<RankingMode>('parado');
   const [showFilters, setShowFilters] = useState(false);
   const [showDivisionInfo, setShowDivisionInfo] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -30,16 +32,14 @@ export default function RankingsPage() {
   const seasons = getSeasons();
   const activeSeason = getActiveSeason();
 
-  // Filters
-  const [filterPosition, setFilterPosition] = useState<string>('');
+  // Filters (no position filter - it's in the nav)
   const [filterTable, setFilterTable] = useState<string>('');
   const [filterPostalCode, setFilterPostalCode] = useState('');
   const [filterVenue, setFilterVenue] = useState<string>('');
 
-  const hasActiveFilters = filterPosition || filterTable || filterPostalCode || filterVenue;
+  const hasActiveFilters = filterTable || filterPostalCode || filterVenue;
 
   const clearFilters = () => {
-    setFilterPosition('');
     setFilterTable('');
     setFilterPostalCode('');
     setFilterVenue('');
@@ -57,7 +57,6 @@ export default function RankingsPage() {
     forceUpdate(n => n + 1);
   };
 
-  // Get venue player IDs for venue filter
   const getVenuePlayerIds = (venueId: string): Set<string> => {
     const ids = new Set<string>();
     MOCK_TOURNAMENTS.filter(t => t.venueId === venueId).forEach(t => {
@@ -69,7 +68,6 @@ export default function RankingsPage() {
     return ids;
   };
 
-  // Filter by season if selected
   const getSeasonTournamentIds = (): Set<string> | null => {
     const seasonId = selectedSeasonId || activeSeason?.id;
     if (!seasonId) return null;
@@ -97,14 +95,10 @@ export default function RankingsPage() {
 
   const registeredOnly = MOCK_RANKINGS.filter(r => r.playerType !== 'invitado');
 
-  // Apply filters
   let filtered = registeredOnly;
   const seasonPlayerIds = getSeasonPlayerIds();
   if (seasonPlayerIds) {
     filtered = filtered.filter(r => seasonPlayerIds.has(r.userId));
-  }
-  if (filterPosition) {
-    filtered = filtered.filter(r => r.preferredPosition === filterPosition);
   }
   if (filterTable) {
     filtered = filtered.filter(r => r.preferredTable === filterTable);
@@ -117,26 +111,31 @@ export default function RankingsPage() {
     filtered = filtered.filter(r => venuePlayerIds.has(r.userId));
   }
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (view === 'porteros') return b.asGoalkeeper - a.asGoalkeeper;
-    if (view === 'delanteros') return b.asForward - a.asForward;
-    return b.general - a.general;
-  });
+  const getElo = (player: typeof filtered[0]) => {
+    if (view === 'general') return player.general;
+    if (view === 'porteros') {
+      return mode === 'parado' 
+        ? (player.goalkeeperStill ?? player.asGoalkeeper) 
+        : (player.goalkeeperMoving ?? player.asGoalkeeper);
+    }
+    // delanteros
+    return mode === 'parado' 
+      ? (player.forwardStill ?? player.asForward) 
+      : (player.forwardMoving ?? player.asForward);
+  };
 
-  const getElo = (player: typeof sorted[0]) => {
-    if (view === 'porteros') return player.asGoalkeeper;
-    if (view === 'delanteros') return player.asForward;
-    return player.general;
+  const sorted = [...filtered].sort((a, b) => getElo(b) - getElo(a));
+
+  const getEloLabel = () => {
+    if (view === 'general') return 'ELO General';
+    if (view === 'porteros') return mode === 'parado' ? 'ELO Portero Parado' : 'ELO Portero Movimiento';
+    return mode === 'parado' ? 'ELO Delantero Parado' : 'ELO Delantero Movimiento';
   };
 
   const pairRankings = getAllPairRankings();
   const venueRankings = getVenueRankings();
   const teamRanking = getTeamRanking();
   const activeVenues = MOCK_VENUES.filter(v => v.status === 'activo');
-
-  const currentSeasonLabel = selectedSeasonId
-    ? seasons.find(s => s.id === selectedSeasonId)?.name || 'Temporada'
-    : activeSeason?.name || 'Todas las temporadas';
 
   return (
     <PageShell title="Ranking">
@@ -165,8 +164,8 @@ export default function RankingsPage() {
         </div>
       )}
 
-      {/* Tab selector */}
-      <div className="mb-4 flex gap-1 overflow-x-auto">
+      {/* Row 1: Tab selector */}
+      <div className="mb-3 flex gap-1 overflow-x-auto">
         {([
           { key: 'individual' as const, label: 'Individual', icon: Trophy },
           { key: 'parejas' as const, label: 'Parejas', icon: Handshake },
@@ -183,7 +182,8 @@ export default function RankingsPage() {
       {/* === INDIVIDUAL === */}
       {tab === 'individual' && (
         <>
-          <div className="mb-3 flex items-center gap-1.5">
+          {/* Row 2: Position view */}
+          <div className="mb-2 flex items-center gap-1.5">
             {([
               { key: 'general' as const, label: 'General', icon: Trophy },
               { key: 'porteros' as const, label: 'Porteros', icon: Shield },
@@ -201,7 +201,19 @@ export default function RankingsPage() {
             </button>
           </div>
 
-          {/* Division info collapsible */}
+          {/* Row 3: Mode selector (only for porteros/delanteros) */}
+          {view !== 'general' && (
+            <div className="mb-3 flex gap-1">
+              {(['parado', 'movimiento'] as const).map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition ${mode === m ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                  {m === 'parado' ? '🧱 Parado' : '💨 Movimiento'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Division info */}
           <button
             onClick={() => setShowDivisionInfo(!showDivisionInfo)}
             className="mb-3 w-full flex items-center justify-between rounded-lg bg-card p-3 shadow-card text-xs font-medium text-muted-foreground hover:bg-muted/80 transition"
@@ -246,7 +258,7 @@ export default function RankingsPage() {
             </div>
           )}
 
-          {/* Filters panel */}
+          {/* Filters panel (no position filter) */}
           {showFilters && (
             <div className="mb-4 rounded-xl bg-card p-4 shadow-card">
               <div className="flex items-center justify-between mb-3">
@@ -259,17 +271,7 @@ export default function RankingsPage() {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {/* Position filter */}
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Posición</label>
-                  <select value={filterPosition} onChange={e => setFilterPosition(e.target.value)}
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="">Todas</option>
-                    <option value="portero">Portero</option>
-                    <option value="delantero">Delantero</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-3 gap-2">
                 {/* Table filter */}
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1 block">Mesa</label>
@@ -302,6 +304,9 @@ export default function RankingsPage() {
             </div>
           )}
 
+          {/* Current view label */}
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{getEloLabel()}</p>
+
           <div className="flex flex-col gap-2.5">
             {sorted.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No se encontraron jugadores con estos filtros.</p>
@@ -325,7 +330,7 @@ export default function RankingsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-[10px] text-muted-foreground">{player.city}</p>
+                      <p className="text-[10px] text-muted-foreground">{player.city || ''}{player.postalCode ? ` · ${player.postalCode}` : ''}</p>
                       {player.preferredPosition && (
                         <span className="rounded-lg bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary capitalize">{player.preferredPosition}</span>
                       )}

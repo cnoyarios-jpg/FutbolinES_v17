@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import PageShell from '@/components/PageShell';
-import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, recordContextStats } from '@/data/mock';
+import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers, findOrCreatePlayer, createGuestPlayer, getGuestPlayers, isGuestPlayer, findOrCreateRegisteredPlayer, getCurrentUser, openCheckIn, closeCheckIn, pairCheckIn, markPairAbsent, removeAbsentPairs, saveCorrection, getCorrections, recordPairHistory, checkStreakAchievement, checkVenueTableAchievements, finalizeTournament, setTournamentMvp, persistRankings, persistPairs, persistTournaments, calculateTournamentAvgElo, getIndividualEnrollments, addIndividualEnrollment, removeIndividualEnrollment, generateBalancedPairs, generateRandomPairs, confirmGeneratedPairs, getTeamMembers, getTeamStats, updateTeamStats, getStoredTeams, fixTeamMemberConsistency, recordEloHistory, addActivityEntry, createTeamMatch, getTeamMatchesForTeam, getTeamMatches, recordContextStats, getEloKey, recalcGeneralElo } from '@/data/mock';
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
@@ -374,7 +374,10 @@ export default function TournamentDetailPage() {
     const getPlayerElo = (userId: string, fallbackElo: number, position: 'portero' | 'delantero') => {
       if (isGuestPlayer(userId)) return 1500;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-      return ranking ? (position === 'portero' ? ranking.asGoalkeeper : ranking.asForward) : fallbackElo;
+      if (!ranking) return fallbackElo;
+      const mode = tournament.playStyle as 'parado' | 'movimiento';
+      const key = getEloKey(position, mode);
+      return ranking[key] ?? (position === 'portero' ? ranking.asGoalkeeper : ranking.asForward);
     };
 
     const winGkElo = getPlayerElo(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.elo, 'portero');
@@ -387,6 +390,7 @@ export default function TournamentDetailPage() {
     const { winnerChange, loserChange } = calculateEloChange(winnerPairAvg, loserPairAvg);
 
     const changes: EloChangeDisplay['changes'] = [];
+    const mode = tournament.playStyle as 'parado' | 'movimiento';
 
     const updateRanking = (
       userId: string,
@@ -401,29 +405,33 @@ export default function TournamentDetailPage() {
       if (!ranking) return;
 
       const scaledChange = Math.round(rawChange * eloMultiplier);
+      const eloKey = getEloKey(position, mode);
+      
+      // Ensure field exists (migration)
+      if (ranking[eloKey] == null) {
+        ranking[eloKey] = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+      }
+
+      const previousElo = ranking[eloKey];
+      const previousGeneral = ranking.general;
+
       if (scaledChange === 0) {
         changes.push({
           userId, displayName, position,
-          previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
-          newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
-          change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0,
+          previousElo, newElo: previousElo, change: 0,
+          previousGeneral, newGeneral: previousGeneral, generalChange: 0,
           rawChange, multiplier: eloMultiplier, won,
         });
         return;
       }
 
-      // Only update the position played
-      const previousElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-      const previousGeneral = ranking.general;
+      // Only update the specific position+mode ELO
+      ranking[eloKey] += scaledChange;
 
-      if (position === 'portero') ranking.asGoalkeeper += scaledChange;
-      else ranking.asForward += scaledChange;
+      // Recalculate derived ELOs
+      recalcGeneralElo(ranking);
 
-      // General = average of both positions
-      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
-
-      const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+      const newElo = ranking[eloKey];
       const generalChange = ranking.general - previousGeneral;
 
       changes.push({
@@ -466,7 +474,8 @@ export default function TournamentDetailPage() {
     changes.forEach(c => {
       const ranking = MOCK_RANKINGS.find(r => r.userId === c.userId);
       if (ranking && !isGuestPlayer(c.userId)) {
-        recordEloHistory(c.userId, c.position === 'portero' ? ranking.asGoalkeeper : ranking.asForward, undefined, c.position);
+        const posKey = `${c.position}_${mode}`;
+        recordEloHistory(c.userId, ranking[getEloKey(c.position as any, mode)], undefined, posKey);
         recordEloHistory(c.userId, ranking.general, undefined, 'general');
         addActivityEntry({
           userId: c.userId,
@@ -498,10 +507,10 @@ export default function TournamentDetailPage() {
       const ranking = MOCK_RANKINGS.find(r => r.userId === change.userId);
       if (!ranking) return;
 
-      if (change.position === 'portero') ranking.asGoalkeeper -= change.change;
-      else ranking.asForward -= change.change;
-      // Recalculate general as average
-      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
+      const mode = tournament.playStyle as 'parado' | 'movimiento';
+      const eloKey = getEloKey(change.position as 'portero' | 'delantero', mode);
+      if (ranking[eloKey] != null) ranking[eloKey] -= change.change;
+      recalcGeneralElo(ranking);
 
       // Revert context stats
       recordContextStats(change.userId, tournament.playStyle, tournament.tableBrand, change.won, { revert: true });

@@ -180,6 +180,11 @@ export interface PlayerRating {
   general: number;
   asGoalkeeper: number;
   asForward: number;
+  // 4 specific ELOs: position + mode
+  goalkeeperStill: number;
+  goalkeeperMoving: number;
+  forwardStill: number;
+  forwardMoving: number;
   byTable: Partial<Record<TableBrand, number>>;
   byStyle: Record<PlayStyle, number>;
   wins: number;
