@@ -30,11 +30,13 @@ const App = () => {
   if (!isLoggedIn) {
     return (
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <LoginPage onLogin={() => setIsLoggedIn(true)} />
-        </TooltipProvider>
+        <ThemeProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <LoginPage onLogin={() => setIsLoggedIn(true)} />
+          </TooltipProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     );
   }
