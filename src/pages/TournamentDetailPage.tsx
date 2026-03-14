@@ -769,7 +769,7 @@ export default function TournamentDetailPage() {
                 ) : (
                   <span className="text-muted-foreground text-xs">ELO medio: sin datos suficientes</span>
                 )}
-                <span className="text-xs text-muted-foreground">({registeredCount} registrados)</span>
+                <span className="text-xs text-muted-foreground">({count} registrados)</span>
               </div>
             );
           })()}

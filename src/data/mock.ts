@@ -1603,3 +1603,247 @@ export function removeIndividualEnrollment(tournamentId: string, usrId: string) 
     localStorage.setItem(INDIVIDUAL_ENROLLMENTS_KEY, JSON.stringify(filtered));
   } catch {}
 }
+
+// ===== MISSING EXPORTS (restored) =====
+
+// Table helpers
+export function getTableForVenue(venueId: string): VenueTable | undefined {
+  return MOCK_TABLES.find(t => t.venueId === venueId);
+}
+
+export const TABLE_CONDITION_LABELS: Record<TableCondition, string> = {
+  perfecta: 'Perfecta',
+  buen_estado: 'Buen estado',
+  estado_normal: 'Estado normal',
+  deteriorada: 'Deteriorada',
+  fuera_de_servicio: 'Fuera de servicio',
+};
+
+export const TABLE_CONDITION_COLORS: Record<TableCondition, string> = {
+  perfecta: 'text-green-600 bg-green-100',
+  buen_estado: 'text-blue-600 bg-blue-100',
+  estado_normal: 'text-yellow-600 bg-yellow-100',
+  deteriorada: 'text-orange-600 bg-orange-100',
+  fuera_de_servicio: 'text-red-600 bg-red-100',
+};
+
+// Search players
+export function searchPlayers(query: string): { userId: string; displayName: string; elo: number; city?: string }[] {
+  if (!query || query.length < 2) return [];
+  const q = query.toLowerCase();
+  return MOCK_RANKINGS
+    .filter(r => r.displayName.toLowerCase().includes(q))
+    .map(r => ({ userId: r.userId, displayName: r.displayName, elo: r.general, city: r.city }))
+    .slice(0, 10);
+}
+
+// Find or create player (for tournament enrollment)
+export function findOrCreatePlayer(displayName: string, elo: number = 1500): { userId: string; displayName: string; elo: number } {
+  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
+  if (existing) return { userId: existing.userId, displayName: existing.displayName, elo: existing.general };
+  const guest = createGuestPlayer(displayName);
+  return { userId: guest.id, displayName: guest.displayName, elo };
+}
+
+export function findOrCreateRegisteredPlayer(displayName: string): { userId: string; displayName: string; elo: number } | null {
+  const existing = MOCK_RANKINGS.find(r => r.displayName.toLowerCase() === displayName.toLowerCase());
+  if (existing) return { userId: existing.userId, displayName: existing.displayName, elo: existing.general };
+  const regUsers = getRegisteredUsers();
+  const regUser = regUsers.find(u => u.displayName.toLowerCase() === displayName.toLowerCase());
+  if (regUser) {
+    ensureRankingEntry(regUser.id, regUser.displayName, regUser.city, regUser.postalCode);
+    const ranking = MOCK_RANKINGS.find(r => r.userId === regUser.id);
+    return { userId: regUser.id, displayName: regUser.displayName, elo: ranking?.general || 1500 };
+  }
+  return null;
+}
+
+// User team helpers
+export function getUserTeam(userId: string): Team | null {
+  const allMembers: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+  const membership = allMembers.find(m => m.userId === userId && m.status !== 'rechazada');
+  if (membership) {
+    return MOCK_TEAMS.find(t => t.id === membership.teamId) || null;
+  }
+  return MOCK_TEAMS.find(t => t.captainId === userId) || null;
+}
+
+// Team join requests
+interface JoinRequest {
+  id: string;
+  teamId: string;
+  userId: string;
+  displayName: string;
+  status: 'pendiente' | 'aceptada' | 'rechazada';
+  createdAt: string;
+}
+
+const JOIN_REQUESTS_KEY = 'futbolines_join_requests';
+
+export function getTeamJoinRequests(teamId: string): JoinRequest[] {
+  try {
+    const all: JoinRequest[] = JSON.parse(localStorage.getItem(JOIN_REQUESTS_KEY) || '[]');
+    return all.filter(r => r.teamId === teamId);
+  } catch { return []; }
+}
+
+export function createJoinRequest(teamId: string, userId: string, displayName: string): JoinRequest {
+  const all: JoinRequest[] = JSON.parse(localStorage.getItem(JOIN_REQUESTS_KEY) || '[]');
+  const req: JoinRequest = {
+    id: `jr_${Date.now()}`, teamId, userId, displayName,
+    status: 'pendiente', createdAt: new Date().toISOString(),
+  };
+  all.push(req);
+  localStorage.setItem(JOIN_REQUESTS_KEY, JSON.stringify(all));
+  return req;
+}
+
+export function respondJoinRequest(requestId: string, accept: boolean) {
+  const all: JoinRequest[] = JSON.parse(localStorage.getItem(JOIN_REQUESTS_KEY) || '[]');
+  const req = all.find(r => r.id === requestId);
+  if (req) {
+    req.status = accept ? 'aceptada' : 'rechazada';
+    localStorage.setItem(JOIN_REQUESTS_KEY, JSON.stringify(all));
+    if (accept) {
+      addTeamMember({
+        id: `tm_${Date.now()}`, teamId: req.teamId, userId: req.userId,
+        displayName: req.displayName, role: 'jugador', joinedAt: new Date().toISOString(), status: 'aceptada',
+      });
+    }
+  }
+}
+
+// Team matches for a specific team
+export function getTeamMatchesForTeam(teamId: string): TeamMatch[] {
+  return getTeamMatches().filter(m => m.team1Id === teamId || m.team2Id === teamId);
+}
+
+export function createTeamMatch(match: TeamMatch) {
+  saveTeamMatch(match);
+}
+
+// User pending invites
+export function getUserPendingInvites(userId: string): (TeamMember & { teamName: string })[] {
+  try {
+    const all: TeamMember[] = JSON.parse(localStorage.getItem(TEAM_MEMBERS_KEY) || '[]');
+    return all
+      .filter(m => m.userId === userId && m.status === 'pendiente')
+      .map(m => {
+        const team = MOCK_TEAMS.find(t => t.id === m.teamId);
+        return { ...m, teamName: team?.name || 'Equipo desconocido' };
+      });
+  } catch { return []; }
+}
+
+// Team league creation
+export function createTeamLeague(name: string, teamIds: string[], pairingsPerMatch: number = 3): TeamLeague {
+  const league: TeamLeague = {
+    id: `tl_${Date.now()}`, name, teamIds, pairingsPerMatch,
+    status: 'activa', createdAt: new Date().toISOString(),
+  };
+  saveTeamLeague(league);
+  return league;
+}
+
+// Generate league matchdays (round-robin)
+export function generateLeagueMatchdays(leagueId: string) {
+  const league = getTeamLeagues().find(l => l.id === leagueId);
+  if (!league) return;
+  const teams = league.teamIds;
+  let matchday = 1;
+  for (let i = 0; i < teams.length; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      const emptyPairings: TeamMatchPairing[] = Array.from({ length: league.pairingsPerMatch }, (_, idx) => ({
+        id: `tmp_${Date.now()}_${idx}_${i}_${j}`,
+        teamMatchId: '',
+        pair1GoalkeeperName: '', pair1ForwardName: '',
+        pair2GoalkeeperName: '', pair2ForwardName: '',
+      }));
+      const match: TeamMatch = {
+        id: `tmatch_${Date.now()}_${i}_${j}`, team1Id: teams[i], team2Id: teams[j],
+        leagueId, matchday: matchday++, pairings: emptyPairings, status: 'pendiente', date: new Date().toISOString(),
+      };
+      match.pairings.forEach(p => p.teamMatchId = match.id);
+      saveTeamMatch(match);
+    }
+  }
+}
+
+export function updateTeamMatchPairing(matchId: string, pairingId: string, updates: Partial<TeamMatchPairing>) {
+  const matches = getTeamMatches();
+  const match = matches.find(m => m.id === matchId);
+  if (!match) return;
+  const pairing = match.pairings.find(p => p.id === pairingId);
+  if (pairing) Object.assign(pairing, updates);
+  localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
+}
+
+export function finalizeTeamMatch(matchId: string) {
+  const matches = getTeamMatches();
+  const match = matches.find(m => m.id === matchId);
+  if (!match) return;
+  const t1Wins = match.pairings.filter(p => p.winnerId === 'team1').length;
+  const t2Wins = match.pairings.filter(p => p.winnerId === 'team2').length;
+  match.winnerId = t1Wins >= t2Wins ? match.team1Id : match.team2Id;
+  match.status = 'finalizado';
+  localStorage.setItem(TEAM_MATCHES_KEY, JSON.stringify(matches));
+}
+
+export function fixTeamMemberConsistency(teamId: string) {
+  const members = getTeamMembers(teamId);
+  const team = MOCK_TEAMS.find(t => t.id === teamId);
+  if (!team) return;
+  if (!members.some(m => m.userId === team.captainId)) {
+    const ranking = MOCK_RANKINGS.find(r => r.userId === team.captainId);
+    addTeamMember({
+      id: `tm_fix_${Date.now()}`, teamId, userId: team.captainId,
+      displayName: ranking?.displayName || 'Capitán', role: 'capitan',
+      joinedAt: team.createdAt, status: 'aceptada',
+    });
+  }
+}
+
+// Generate balanced pairs from individual enrollments
+export function generateBalancedPairs(tournamentId: string): TournamentPair[] {
+  const enrollments = getIndividualEnrollments(tournamentId);
+  const sorted = [...enrollments].sort((a, b) => b.elo - a.elo);
+  const pairs: TournamentPair[] = [];
+  for (let i = 0; i < Math.floor(sorted.length / 2); i++) {
+    const gk = sorted[i];
+    const fw = sorted[sorted.length - 1 - i];
+    pairs.push({
+      id: `gen_p_${Date.now()}_${i}`, tournamentId,
+      goalkeeper: { userId: gk.userId, displayName: gk.displayName, elo: gk.elo },
+      forward: { userId: fw.userId, displayName: fw.displayName, elo: fw.elo },
+      seed: i + 1, status: 'inscrita',
+    });
+  }
+  return pairs;
+}
+
+export function generateRandomPairs(tournamentId: string): TournamentPair[] {
+  const enrollments = getIndividualEnrollments(tournamentId);
+  const shuffled = [...enrollments].sort(() => Math.random() - 0.5);
+  const pairs: TournamentPair[] = [];
+  for (let i = 0; i < Math.floor(shuffled.length / 2); i++) {
+    const gk = shuffled[i * 2];
+    const fw = shuffled[i * 2 + 1];
+    if (!gk || !fw) break;
+    pairs.push({
+      id: `gen_r_${Date.now()}_${i}`, tournamentId,
+      goalkeeper: { userId: gk.userId, displayName: gk.displayName, elo: gk.elo },
+      forward: { userId: fw.userId, displayName: fw.displayName, elo: fw.elo },
+      seed: i + 1, status: 'inscrita',
+    });
+  }
+  return pairs;
+}
+
+export function confirmGeneratedPairs(pairs: TournamentPair[]) {
+  pairs.forEach(p => {
+    if (!MOCK_PAIRS.some(mp => mp.id === p.id)) {
+      MOCK_PAIRS.push(p);
+    }
+  });
+  persistPairs();
+}
