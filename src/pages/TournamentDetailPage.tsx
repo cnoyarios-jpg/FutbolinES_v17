@@ -407,37 +407,32 @@ export default function TournamentDetailPage() {
           previousElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           newElo: position === 'portero' ? ranking.asGoalkeeper : ranking.asForward,
           change: 0, previousGeneral: ranking.general, newGeneral: ranking.general,
-          generalChange: 0, totalAppliedChange: 0,
-          rawChange, multiplier: eloMultiplier, contextCoefficient: 1, won,
+          generalChange: 0,
+          rawChange, multiplier: eloMultiplier, won,
         });
         return;
       }
 
-      // Apply contextual coefficient (0.85 – 1.15)
-      const coeff = getContextualCoefficient(userId, tournament.playStyle, tournament.tableBrand, won);
-      const adjustedChange = Math.round(scaledChange * coeff);
-
-      // Simple split: 60% to position, 40% to general
-      const positionChange = Math.round(adjustedChange * 0.6);
-      const generalChange = adjustedChange - positionChange;
-
+      // Only update the position played
       const previousElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
       const previousGeneral = ranking.general;
 
-      ranking.general += generalChange;
-      if (position === 'portero') ranking.asGoalkeeper += positionChange;
-      else ranking.asForward += positionChange;
+      if (position === 'portero') ranking.asGoalkeeper += scaledChange;
+      else ranking.asForward += scaledChange;
+
+      // General = average of both positions
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
 
       const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-      const totalAppliedChange = (newElo - previousElo) + generalChange;
+      const generalChange = ranking.general - previousGeneral;
 
       changes.push({
         userId, displayName, position,
         previousElo, newElo,
         change: newElo - previousElo,
         previousGeneral, newGeneral: ranking.general,
-        generalChange, totalAppliedChange,
-        rawChange, multiplier: eloMultiplier, contextCoefficient: coeff, won,
+        generalChange,
+        rawChange, multiplier: eloMultiplier, won,
       });
 
       // Record context stats
