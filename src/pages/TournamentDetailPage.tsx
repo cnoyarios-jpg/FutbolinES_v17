@@ -371,6 +371,8 @@ export default function TournamentDetailPage() {
       return;
     }
 
+    const eloMultiplier = guestCount > 0 ? 0.25 : 1;
+
     const getPlayerElo = (userId: string, fallbackElo: number, position: 'portero' | 'delantero') => {
       if (isGuestPlayer(userId)) return 1500;
       const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
