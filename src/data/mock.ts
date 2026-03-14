@@ -36,26 +36,10 @@ const TABLE_PERFORMANCE_KEY = 'futbolines_table_performance';
 const CONTEXT_STATS_KEY = 'futbolines_context_stats';
 
 // ===== POSTAL CODE → CITY MAPPING =====
-const POSTAL_CITY_MAP: Record<string, string> = {
-  '28': 'Madrid', '08': 'Barcelona', '48': 'Bilbao', '41': 'Sevilla',
-  '46': 'Valencia', '29': 'Málaga', '50': 'Zaragoza', '15': 'A Coruña',
-  '36': 'Vigo', '33': 'Oviedo', '18': 'Granada', '30': 'Murcia',
-  '35': 'Las Palmas', '38': 'Tenerife', '07': 'Palma', '47': 'Valladolid',
-  '01': 'Vitoria', '20': 'San Sebastián', '31': 'Pamplona', '39': 'Santander',
-  '10': 'Cáceres', '06': 'Badajoz', '45': 'Toledo', '13': 'Ciudad Real',
-  '02': 'Albacete', '16': 'Cuenca', '19': 'Guadalajara', '44': 'Teruel',
-  '22': 'Huesca', '42': 'Soria', '40': 'Segovia', '05': 'Ávila',
-  '49': 'Zamora', '34': 'Palencia', '09': 'Burgos', '24': 'León',
-  '37': 'Salamanca', '26': 'Logroño', '11': 'Cádiz', '14': 'Córdoba',
-  '23': 'Jaén', '04': 'Almería', '21': 'Huelva', '43': 'Tarragona',
-  '25': 'Lleida', '17': 'Girona', '03': 'Alicante', '12': 'Castellón',
-  '27': 'Lugo', '32': 'Ourense', '51': 'Ceuta', '52': 'Melilla',
-};
+import { lookupPostalCode } from '@/data/postalCodes';
 
 export function getCityFromPostalCode(postalCode: string): string {
-  if (!postalCode || postalCode.length < 2) return '';
-  const prefix = postalCode.slice(0, 2);
-  return POSTAL_CITY_MAP[prefix] || '';
+  return lookupPostalCode(postalCode);
 }
 
 export function getRegisteredUsers(): RegisteredUser[] {

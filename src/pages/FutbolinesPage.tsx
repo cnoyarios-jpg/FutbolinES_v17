@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, Plus, X } from 'lucide-react';
-import { MOCK_VENUES, MOCK_TABLES, getTableForVenue, TABLE_CONDITION_LABELS, TABLE_CONDITION_COLORS } from '@/data/mock';
+import { MOCK_VENUES, MOCK_TABLES, getTableForVenue, TABLE_CONDITION_LABELS, TABLE_CONDITION_COLORS, getCityFromPostalCode } from '@/data/mock';
 import VenueCard from '@/components/VenueCard';
 import PageShell from '@/components/PageShell';
 import { TableBrand, TableCondition, Venue, VenueTable } from '@/types';
@@ -16,11 +16,13 @@ export default function FutbolinesPage() {
   const [, forceUpdate] = useState(0);
 
   const [venueForm, setVenueForm] = useState({
-    name: '', city: '', address: '', description: '',
+    name: '', postalCode: '', address: '', description: '',
     tableBrand: 'Presas' as TableBrand,
     tableQuantity: '1',
     tableCondition: 'buen_estado' as TableCondition,
   });
+
+  const derivedCity = venueForm.postalCode.length >= 2 ? getCityFromPostalCode(venueForm.postalCode) : '';
 
   const filteredVenues = useMemo(() => {
     return MOCK_VENUES.filter(v => {
@@ -34,11 +36,12 @@ export default function FutbolinesPage() {
 
   const handleAddVenue = () => {
     if (!venueForm.name.trim()) { toast.error('El nombre del local es obligatorio'); return; }
-    if (!venueForm.city.trim()) { toast.error('La ciudad es obligatoria'); return; }
+    if (!venueForm.postalCode.trim() || !/^\d{5}$/.test(venueForm.postalCode.trim())) { toast.error('El código postal debe ser exactamente 5 dígitos'); return; }
 
+    const city = derivedCity || venueForm.postalCode;
     const newId = `v_${Date.now()}`;
     const newVenue: Venue = {
-      id: newId, name: venueForm.name, address: venueForm.address || '', city: venueForm.city,
+      id: newId, name: venueForm.name, address: venueForm.address || '', city,
       photos: [], description: venueForm.description || undefined,
       status: 'activo', verificationLevel: 'no_verificado', confidenceScore: 50,
       verificationCount: 0, createdBy: 'u1', createdAt: new Date().toISOString().split('T')[0],
@@ -51,7 +54,7 @@ export default function FutbolinesPage() {
     };
     MOCK_TABLES.push(newTable);
 
-    setVenueForm({ name: '', city: '', address: '', description: '', tableBrand: 'Presas', tableQuantity: '1', tableCondition: 'buen_estado' });
+    setVenueForm({ name: '', postalCode: '', address: '', description: '', tableBrand: 'Presas', tableQuantity: '1', tableCondition: 'buen_estado' });
     setShowAddVenue(false);
     toast.success('¡Futbolín añadido correctamente!');
     forceUpdate(n => n + 1);
@@ -96,8 +99,10 @@ export default function FutbolinesPage() {
                 <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ej: Bar El Rincón" value={venueForm.name} onChange={e => setVenueForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ciudad *</label>
-                <input className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Madrid" value={venueForm.city} onChange={e => setVenueForm(f => ({ ...f, city: e.target.value }))} />
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Código Postal *</label>
+                <input className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) ? 'border-destructive' : 'border-input'} bg-card`} placeholder="Ej: 36600" value={venueForm.postalCode} onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 5); setVenueForm(f => ({ ...f, postalCode: val })); }} maxLength={5} inputMode="numeric" />
+                {venueForm.postalCode.trim() && !/^\d{5}$/.test(venueForm.postalCode.trim()) && (<p className="mt-1 text-xs text-destructive">Debe ser exactamente 5 dígitos</p>)}
+                {derivedCity && venueForm.postalCode.length >= 2 && (<p className="mt-1 text-xs text-success font-medium">📍 {derivedCity}</p>)}
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dirección (opcional)</label>
