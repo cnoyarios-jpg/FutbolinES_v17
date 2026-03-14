@@ -95,6 +95,7 @@ export function ensureRankingEntry(
     MOCK_RANKINGS.push({
       userId, displayName, city: city || '', postalCode,
       general: 1500, asGoalkeeper: 1500, asForward: 1500,
+      goalkeeperStill: 1500, goalkeeperMoving: 1500, forwardStill: 1500, forwardMoving: 1500,
       byTable: {}, byStyle: { parado: 0, movimiento: 0 },
       wins: 0, losses: 0, tournamentsPlayed: 0, tournamentsWon: 0,
       mvpCount: 0, currentStreak: 0, bestStreak: 0,
