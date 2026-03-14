@@ -5,7 +5,7 @@ import { MOCK_TOURNAMENTS, MOCK_PAIRS, MOCK_RANKINGS, MOCK_TEAMS, searchPlayers,
 import { getDivision } from '@/lib/divisions';
 import { DivisionIcon } from '@/components/DivisionBadge';
 import { ArrowLeft, Calendar, MapPin, Users, Shield, Target, Trophy, Check, Plus, X, Search, Crown, Clock, ChevronRight, UserCheck, UserPlus, ClipboardCheck, AlertTriangle, RotateCcw } from 'lucide-react';
-import { generateBracket, type BracketMatch, calculate2v2EloChanges, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
+import { generateBracket, type BracketMatch, calculateEloChange, calculateEffectiveRating, generateRoundRobinMatches, calculateRoundRobinStandings } from '@/lib/bracket';
 import { TournamentPair, RoundRobinMatch, IndividualEnrollment } from '@/types';
 import { toast } from 'sonner';
 
@@ -37,13 +37,27 @@ const statusColors: Record<string, string> = {
 
 interface EloChangeDisplay {
   matchKey: string;
+  hasGuests: boolean;
   changes: {
     userId: string;
     displayName: string;
-    position: string;
+    position: 'portero' | 'delantero';
     previousElo: number;
     newElo: number;
-    change: number;
+    change: number; // cambio real aplicado en la posición
+    previousGeneral: number;
+    newGeneral: number;
+    generalChange: number;
+    modeChange: number;
+    tableChange: number;
+    totalAppliedChange: number;
+    rawChange: number;
+    multiplier: number;
+    baseGeneralElo: number;
+    basePositionElo: number;
+    modeAdjust: number;
+    tableAdjust: number;
+    effectiveElo: number;
   }[];
 }
 
@@ -342,155 +356,206 @@ export default function TournamentDetailPage() {
   // === ELO UPDATE HELPER ===
   const applyEloChanges = useCallback((winnerId: string, loserId: string, matchKey: string) => {
     if (!tournament || tournament.status === 'finalizado' || tournament.status === 'cancelado') return;
+
     const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
     const winnerPair = allPairs.find(p => p.id === winnerId);
     const loserPair = allPairs.find(p => p.id === loserId);
-
-    if (winnerPair && loserPair) {
-      const allPlayerIds = [
-        winnerPair.goalkeeper.userId, winnerPair.forward.userId,
-        loserPair.goalkeeper.userId, loserPair.forward.userId
-      ];
-      const guestCount = allPlayerIds.filter(uid => isGuestPlayer(uid)).length;
-
-      // Guest rules: all guests = 0%, mixed = 25%, all registered = 100%
-      if (guestCount === 4) {
-        toast.info('Todos invitados: sin impacto en ELO');
-        return;
-      }
-      const eloMultiplier = guestCount > 0 ? 0.25 : 1.0;
-
-      const eloResult = calculate2v2EloChanges(
-        winnerPair.goalkeeper.elo,
-        winnerPair.forward.elo,
-        loserPair.goalkeeper.elo,
-        loserPair.forward.elo,
-      );
-
-      const changes: EloChangeDisplay['changes'] = [];
-
-      const updateRanking = (userId: string, displayName: string, rawChange: number, position: string) => {
-        if (isGuestPlayer(userId)) return;
-        const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-        if (!ranking) return;
-
-        const scaledChange = Math.round(rawChange * eloMultiplier);
-        const posChange = Math.round(scaledChange * 0.45);
-        const genChange = Math.round(scaledChange * 0.30);
-        const modeChange = Math.round(scaledChange * 0.15);
-        const tableChange = scaledChange - posChange - genChange - modeChange; // remainder (~10%)
-
-        const prevElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-
-        // Layer 1: General
-        ranking.general += genChange;
-        // Layer 2: Position (only the played position)
-        if (position === 'portero') ranking.asGoalkeeper += posChange;
-        else ranking.asForward += posChange;
-        // Layer 3: Mode adjustment (clamped -180 to +180)
-        const playStyle = tournament.playStyle;
-        ranking.byStyle[playStyle] = Math.max(-180, Math.min(180, (ranking.byStyle[playStyle] || 0) + modeChange));
-        // Layer 4: Table adjustment (clamped -90 to +90)
-        const tableBrand = tournament.tableBrand;
-        ranking.byTable[tableBrand] = Math.max(-90, Math.min(90, (ranking.byTable[tableBrand] || 0) + tableChange));
-
-        const newPosElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
-        changes.push({ userId, displayName, position, previousElo: prevElo, newElo: newPosElo, change: scaledChange });
-      };
-
-      updateRanking(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, eloResult.winnerGoalkeeperChange, 'portero');
-      updateRanking(winnerPair.forward.userId, winnerPair.forward.displayName, eloResult.winnerForwardChange, 'delantero');
-      updateRanking(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, eloResult.loserGoalkeeperChange, 'portero');
-      updateRanking(loserPair.forward.userId, loserPair.forward.displayName, eloResult.loserForwardChange, 'delantero');
-
-      const wGk = MOCK_RANKINGS.find(r => r.userId === winnerPair.goalkeeper.userId);
-      const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
-      const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
-      const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
-      if (wGk) { wGk.wins++; wGk.currentStreak = (wGk.currentStreak || 0) + 1; wGk.bestStreak = Math.max(wGk.bestStreak || 0, wGk.currentStreak); }
-      if (wFw) { wFw.wins++; wFw.currentStreak = (wFw.currentStreak || 0) + 1; wFw.bestStreak = Math.max(wFw.bestStreak || 0, wFw.currentStreak); }
-      if (lGk) { lGk.losses++; lGk.currentStreak = 0; }
-      if (lFw) { lFw.losses++; lFw.currentStreak = 0; }
-
-      // Check streak achievements
-      [winnerPair.goalkeeper.userId, winnerPair.forward.userId].forEach(uid => {
-        if (!isGuestPlayer(uid)) checkStreakAchievement(uid);
-      });
-
-      // Record pair history
-      recordPairHistory(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerPair.forward.userId, winnerPair.forward.displayName, true);
-      recordPairHistory(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserPair.forward.userId, loserPair.forward.displayName, false);
-
-      setEloChanges(prev => [...prev, { matchKey, changes }]);
-      persistRankings();
-      // Record ELO history & activity for each player
-      changes.forEach(c => {
-        const r = MOCK_RANKINGS.find(r => r.userId === c.userId);
-        if (r && !isGuestPlayer(c.userId)) {
-          recordEloHistory(c.userId, c.position === 'portero' ? r.asGoalkeeper : r.asForward, undefined, c.position as 'portero' | 'delantero');
-          recordEloHistory(c.userId, r.general, undefined, 'general');
-          addActivityEntry({ userId: c.userId, type: c.change > 0 ? 'match_win' : 'match_loss', description: (c.change > 0 ? 'Victoria' : 'Derrota') + ' en ' + (tournament?.name || 'torneo'), eloChange: c.change, date: new Date().toISOString() });
-        }
-      });
-      if (guestCount > 0) {
-        toast.info('Partido con invitado: ELO reducido al 25%');
-      } else {
-        toast.success('Ganador registrado. ELO actualizado.');
-      }
-    }
-  }, [id]);
-
-  // === REVERT ELO CHANGES (for corrections) ===
-  const revertEloChanges = useCallback((previousWinnerId: string, previousLoserId: string, matchKey: string) => {
-    const allPairs = MOCK_PAIRS.filter(p => p.tournamentId === id);
-    const winnerPair = allPairs.find(p => p.id === previousWinnerId);
-    const loserPair = allPairs.find(p => p.id === previousLoserId);
-
     if (!winnerPair || !loserPair) return;
 
-    // Recalculate the ELO changes that were applied
-    const eloResult = calculate2v2EloChanges(
-      winnerPair.goalkeeper.elo,
-      winnerPair.forward.elo,
-      loserPair.goalkeeper.elo,
-      loserPair.forward.elo,
-    );
+    const allPlayerIds = [
+      winnerPair.goalkeeper.userId,
+      winnerPair.forward.userId,
+      loserPair.goalkeeper.userId,
+      loserPair.forward.userId,
+    ];
+    const guestCount = allPlayerIds.filter(uid => isGuestPlayer(uid)).length;
 
-    // Revert for each player (invert the changes)
-    const revertRanking = (userId: string, change: number, position: string) => {
-      if (isGuestPlayer(userId)) return;
-      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
-      if (ranking) {
-        const posRevert = Math.round(change * 0.45);
-        const genRevert = Math.round(change * 0.30);
-        if (position === 'portero') ranking.asGoalkeeper -= posRevert;
-        else ranking.asForward -= posRevert;
-        ranking.general -= genRevert;
-        // Mode/table adjustments are small, skip reverting for simplicity
+    // Guest rules: all guests = 0%, mixed = 25%, all registered = 100%
+    if (guestCount === 4) {
+      toast.info('Todos invitados: sin impacto en ELO');
+      return;
+    }
+
+    const eloMultiplier = guestCount > 0 ? 0.25 : 1;
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+    const getPlayerContext = (userId: string, fallbackElo: number, position: 'portero' | 'delantero') => {
+      if (isGuestPlayer(userId)) {
+        return {
+          positionElo: 1500,
+          generalElo: 1500,
+          modeAdjust: 0,
+          tableAdjust: 0,
+          effectiveElo: 1500,
+        };
       }
+
+      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+      const positionElo = ranking ? (position === 'portero' ? ranking.asGoalkeeper : ranking.asForward) : fallbackElo;
+      const generalElo = ranking?.general ?? fallbackElo;
+      const modeAdjust = ranking?.byStyle?.[tournament.playStyle] ?? 0;
+      const tableAdjust = ranking?.byTable?.[tournament.tableBrand] ?? 0;
+
+      return {
+        positionElo,
+        generalElo,
+        modeAdjust,
+        tableAdjust,
+        effectiveElo: calculateEffectiveRating(positionElo, generalElo, modeAdjust, tableAdjust),
+      };
     };
 
-    // Revert winner gains
-    revertRanking(winnerPair.goalkeeper.userId, eloResult.winnerGoalkeeperChange, 'portero');
-    revertRanking(winnerPair.forward.userId, eloResult.winnerForwardChange, 'delantero');
-    // Revert loser losses
-    revertRanking(loserPair.goalkeeper.userId, eloResult.loserGoalkeeperChange, 'portero');
-    revertRanking(loserPair.forward.userId, eloResult.loserForwardChange, 'delantero');
+    const winnerGoalkeeperContext = getPlayerContext(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.elo, 'portero');
+    const winnerForwardContext = getPlayerContext(winnerPair.forward.userId, winnerPair.forward.elo, 'delantero');
+    const loserGoalkeeperContext = getPlayerContext(loserPair.goalkeeper.userId, loserPair.goalkeeper.elo, 'portero');
+    const loserForwardContext = getPlayerContext(loserPair.forward.userId, loserPair.forward.elo, 'delantero');
 
-    // Revert win/loss stats
+    const winnerPairEffective = Math.round((winnerGoalkeeperContext.effectiveElo + winnerForwardContext.effectiveElo) / 2);
+    const loserPairEffective = Math.round((loserGoalkeeperContext.effectiveElo + loserForwardContext.effectiveElo) / 2);
+    const { winnerChange, loserChange } = calculateEloChange(winnerPairEffective, loserPairEffective);
+
+    const changes: EloChangeDisplay['changes'] = [];
+
+    const updateRanking = (
+      userId: string,
+      displayName: string,
+      rawChange: number,
+      position: 'portero' | 'delantero',
+      context: { positionElo: number; generalElo: number; modeAdjust: number; tableAdjust: number; effectiveElo: number }
+    ) => {
+      if (isGuestPlayer(userId)) return;
+
+      const ranking = MOCK_RANKINGS.find(r => r.userId === userId);
+      if (!ranking) return;
+
+      const scaledChange = Math.round(rawChange * eloMultiplier);
+      const positionChange = Math.round(scaledChange * 0.45);
+      const generalChange = Math.round(scaledChange * 0.30);
+      const requestedModeChange = Math.round(scaledChange * 0.15);
+      const requestedTableChange = scaledChange - positionChange - generalChange - requestedModeChange;
+
+      const previousElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+      const previousGeneral = ranking.general;
+
+      ranking.general += generalChange;
+      if (position === 'portero') ranking.asGoalkeeper += positionChange;
+      else ranking.asForward += positionChange;
+
+      const previousModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
+      const nextModeAdjust = clamp(previousModeAdjust + requestedModeChange, -180, 180);
+      ranking.byStyle[tournament.playStyle] = nextModeAdjust;
+      const appliedModeChange = nextModeAdjust - previousModeAdjust;
+
+      const previousTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
+      const nextTableAdjust = clamp(previousTableAdjust + requestedTableChange, -90, 90);
+      ranking.byTable[tournament.tableBrand] = nextTableAdjust;
+      const appliedTableChange = nextTableAdjust - previousTableAdjust;
+
+      const newElo = position === 'portero' ? ranking.asGoalkeeper : ranking.asForward;
+      const appliedPositionChange = newElo - previousElo;
+      const totalAppliedChange = appliedPositionChange + generalChange + appliedModeChange + appliedTableChange;
+
+      changes.push({
+        userId,
+        displayName,
+        position,
+        previousElo,
+        newElo,
+        change: appliedPositionChange,
+        previousGeneral,
+        newGeneral: ranking.general,
+        generalChange,
+        modeChange: appliedModeChange,
+        tableChange: appliedTableChange,
+        totalAppliedChange,
+        rawChange,
+        multiplier: eloMultiplier,
+        baseGeneralElo: context.generalElo,
+        basePositionElo: context.positionElo,
+        modeAdjust: context.modeAdjust,
+        tableAdjust: context.tableAdjust,
+        effectiveElo: context.effectiveElo,
+      });
+    };
+
+    updateRanking(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerChange, 'portero', winnerGoalkeeperContext);
+    updateRanking(winnerPair.forward.userId, winnerPair.forward.displayName, winnerChange, 'delantero', winnerForwardContext);
+    updateRanking(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserChange, 'portero', loserGoalkeeperContext);
+    updateRanking(loserPair.forward.userId, loserPair.forward.displayName, loserChange, 'delantero', loserForwardContext);
+
     const wGk = MOCK_RANKINGS.find(r => r.userId === winnerPair.goalkeeper.userId);
     const wFw = MOCK_RANKINGS.find(r => r.userId === winnerPair.forward.userId);
     const lGk = MOCK_RANKINGS.find(r => r.userId === loserPair.goalkeeper.userId);
     const lFw = MOCK_RANKINGS.find(r => r.userId === loserPair.forward.userId);
-    if (wGk) { wGk.wins = Math.max(0, wGk.wins - 1); }
-    if (wFw) { wFw.wins = Math.max(0, wFw.wins - 1); }
-    if (lGk) { lGk.losses = Math.max(0, lGk.losses - 1); }
-    if (lFw) { lFw.losses = Math.max(0, lFw.losses - 1); }
+    if (wGk) { wGk.wins++; wGk.currentStreak = (wGk.currentStreak || 0) + 1; wGk.bestStreak = Math.max(wGk.bestStreak || 0, wGk.currentStreak); }
+    if (wFw) { wFw.wins++; wFw.currentStreak = (wFw.currentStreak || 0) + 1; wFw.bestStreak = Math.max(wFw.bestStreak || 0, wFw.currentStreak); }
+    if (lGk) { lGk.losses++; lGk.currentStreak = 0; }
+    if (lFw) { lFw.losses++; lFw.currentStreak = 0; }
 
-    // Remove ELO changes display for this match
+    [winnerPair.goalkeeper.userId, winnerPair.forward.userId].forEach(uid => {
+      if (!isGuestPlayer(uid)) checkStreakAchievement(uid);
+    });
+
+    recordPairHistory(winnerPair.goalkeeper.userId, winnerPair.goalkeeper.displayName, winnerPair.forward.userId, winnerPair.forward.displayName, true);
+    recordPairHistory(loserPair.goalkeeper.userId, loserPair.goalkeeper.displayName, loserPair.forward.userId, loserPair.forward.displayName, false);
+
+    setEloChanges(prev => [...prev, { matchKey, hasGuests: guestCount > 0, changes }]);
+    persistRankings();
+
+    changes.forEach(c => {
+      const ranking = MOCK_RANKINGS.find(r => r.userId === c.userId);
+      if (ranking && !isGuestPlayer(c.userId)) {
+        recordEloHistory(c.userId, c.position === 'portero' ? ranking.asGoalkeeper : ranking.asForward, undefined, c.position);
+        recordEloHistory(c.userId, ranking.general, undefined, 'general');
+        addActivityEntry({
+          userId: c.userId,
+          type: c.rawChange >= 0 ? 'match_win' : 'match_loss',
+          description: `${c.rawChange >= 0 ? 'Victoria' : 'Derrota'} en ${tournament.name}`,
+          eloChange: c.totalAppliedChange,
+          date: new Date().toISOString(),
+        });
+      }
+    });
+
+    if (guestCount > 0) {
+      const allZero = changes.every(c => c.totalAppliedChange === 0);
+      toast.info(allZero ? 'Partido con invitados: cambio real 0 en ELO' : 'Partido con invitados: ELO reducido al 25%');
+    } else {
+      toast.success('Ganador registrado. ELO actualizado.');
+    }
+  }, [id, tournament]);
+
+  // === REVERT ELO CHANGES (for corrections) ===
+  const revertEloChanges = useCallback((previousWinnerId: string, previousLoserId: string, matchKey: string) => {
+    if (!tournament) return;
+
+    const entry = eloChanges.find(ec => ec.matchKey === matchKey);
+    if (!entry) return;
+
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+    entry.changes.forEach(change => {
+      if (isGuestPlayer(change.userId)) return;
+      const ranking = MOCK_RANKINGS.find(r => r.userId === change.userId);
+      if (!ranking) return;
+
+      if (change.position === 'portero') ranking.asGoalkeeper -= change.change;
+      else ranking.asForward -= change.change;
+      ranking.general -= change.generalChange;
+
+      const currentModeAdjust = ranking.byStyle[tournament.playStyle] || 0;
+      ranking.byStyle[tournament.playStyle] = clamp(currentModeAdjust - change.modeChange, -180, 180);
+
+      const currentTableAdjust = ranking.byTable[tournament.tableBrand] || 0;
+      ranking.byTable[tournament.tableBrand] = clamp(currentTableAdjust - change.tableChange, -90, 90);
+
+      if (change.rawChange > 0) ranking.wins = Math.max(0, ranking.wins - 1);
+      if (change.rawChange < 0) ranking.losses = Math.max(0, ranking.losses - 1);
+    });
+
     setEloChanges(prev => prev.filter(ec => ec.matchKey !== matchKey));
     persistRankings();
-  }, [id]);
+  }, [eloChanges, tournament]);
 
   // === BRACKET: Select winner (elimination) ===
   const handleSelectWinner = useCallback((roundIdx: number, matchIdx: number, winnerId: string) => {
@@ -1295,19 +1360,51 @@ export default function TournamentDetailPage() {
           <div className="flex flex-col gap-3">
             {eloChanges.map((ec, i) => (
               <div key={i} className="rounded-lg bg-muted p-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Partido {ec.matchKey}</p>
-                {ec.changes.map((c, j) => (
-                  <div key={j} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="font-medium">{c.displayName} <span className="text-muted-foreground">({c.position})</span></span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-muted-foreground">{c.previousElo}</span>
-                      <span className={c.change >= 0 ? 'text-success font-semibold' : 'text-destructive font-semibold'}>
-                        {c.change >= 0 ? `+${c.change}` : c.change}
-                      </span>
-                      <span className="font-bold">{c.newElo}</span>
-                    </span>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground">Partido {ec.matchKey}</p>
+                  {ec.hasGuests && (
+                    <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[9px] font-semibold text-warning-foreground">Con invitados</span>
+                  )}
+                </div>
+
+                {ec.changes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin cambios aplicables.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {ec.changes.map((c, j) => (
+                      <div key={j} className="rounded-md bg-card/70 p-2">
+                        <div className="flex items-center justify-between text-xs py-0.5">
+                          <span className="font-medium">{c.displayName} <span className="text-muted-foreground">({c.position})</span></span>
+                          <span className="flex items-center gap-1">
+                            <span className="text-muted-foreground">{c.previousElo}</span>
+                            <span className={c.change > 0 ? 'text-success font-semibold' : c.change < 0 ? 'text-destructive font-semibold' : 'text-muted-foreground font-semibold'}>
+                              {c.change >= 0 ? `+${c.change}` : c.change}
+                            </span>
+                            <span className="font-bold">{c.newElo}</span>
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                          <span>Total aplicado: <span className="font-semibold text-foreground">{c.totalAppliedChange >= 0 ? `+${c.totalAppliedChange}` : c.totalAppliedChange}</span></span>
+                          <span>General: {c.previousGeneral} → {c.newGeneral}</span>
+                          <span>ΔModo: {c.modeChange >= 0 ? `+${c.modeChange}` : c.modeChange}</span>
+                          <span>ΔMesa: {c.tableChange >= 0 ? `+${c.tableChange}` : c.tableChange}</span>
+                        </div>
+
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[10px] font-medium text-primary">Ver ELO efectivo usado</summary>
+                          <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
+                            <span>ELO general: <span className="font-semibold text-foreground">{c.baseGeneralElo}</span></span>
+                            <span>ELO posición: <span className="font-semibold text-foreground">{c.basePositionElo}</span></span>
+                            <span>Ajuste modo: <span className="font-semibold text-foreground">{c.modeAdjust >= 0 ? `+${c.modeAdjust}` : c.modeAdjust}</span></span>
+                            <span>Ajuste mesa: <span className="font-semibold text-foreground">{c.tableAdjust >= 0 ? `+${c.tableAdjust}` : c.tableAdjust}</span></span>
+                            <span className="col-span-2">ELO efectivo: <span className="font-semibold text-foreground">{c.effectiveElo}</span></span>
+                          </div>
+                        </details>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             ))}
           </div>

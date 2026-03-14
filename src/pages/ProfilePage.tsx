@@ -94,33 +94,54 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
     return tPairs.some(p => p.goalkeeper.userId === targetUserId || p.forward.userId === targetUserId);
   });
 
-  // ELO history with position support
+  // ELO history with real day aggregation (7d / 30d / 3m / all)
   ensureEloHistory(targetUserId);
   const eloChartData = useMemo(() => {
     const history = getEloHistory(targetUserId);
-    const now = Date.now();
-    const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '3m': 90, 'all': 99999 };
-    const cutoff = now - daysMap[eloTimeFilter] * 24 * 60 * 60 * 1000;
-    
-    // All positions now have their own history entries - just filter directly
-    const positionFiltered = history.filter(e => (e.position || 'general') === eloPositionFilter);
-    let filtered = positionFiltered.filter(e => eloTimeFilter === 'all' || new Date(e.date).getTime() >= cutoff);
-    
-    // If no data in range, add current value
-    if (filtered.length === 0 && rating) {
-      const currentElo = eloPositionFilter === 'portero' ? rating.asGoalkeeper 
-        : eloPositionFilter === 'delantero' ? rating.asForward 
-        : rating.general;
-      filtered = [{ userId: targetUserId, elo: currentElo, date: new Date().toISOString(), position: eloPositionFilter }];
+    const dayRanges: Record<'7d' | '30d' | '3m' | 'all', number | null> = {
+      '7d': 7,
+      '30d': 30,
+      '3m': 90,
+      'all': null,
+    };
+
+    const rangeDays = dayRanges[eloTimeFilter];
+    const startDate = (() => {
+      if (rangeDays === null) return null;
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() - (rangeDays - 1));
+      return date.getTime();
+    })();
+
+    const positionHistory = history
+      .filter(e => (e.position || 'general') === eloPositionFilter)
+      .filter(e => startDate === null || new Date(e.date).getTime() >= startDate)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const lastPerDay = new Map<string, { date: string; elo: number }>();
+    positionHistory.forEach(entry => {
+      const dayKey = new Date(entry.date).toISOString().slice(0, 10);
+      lastPerDay.set(dayKey, { date: entry.date, elo: entry.elo });
+    });
+
+    const aggregated = Array.from(lastPerDay.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (aggregated.length === 0 && rating) {
+      const currentElo =
+        eloPositionFilter === 'portero'
+          ? rating.asGoalkeeper
+          : eloPositionFilter === 'delantero'
+            ? rating.asForward
+            : rating.general;
+
+      return [{
+        date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+        elo: currentElo,
+      }];
     }
-    
-    // If only 1 point, duplicate to show a line
-    if (filtered.length === 1) {
-      const prev = new Date(new Date(filtered[0].date).getTime() - 24 * 60 * 60 * 1000).toISOString();
-      filtered = [{ ...filtered[0], date: prev }, ...filtered];
-    }
-    
-    return filtered.map(e => ({
+
+    return aggregated.map(e => ({
       date: new Date(e.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
       elo: e.elo,
     }));
@@ -288,7 +309,7 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
       )}
 
       {/* ELO Evolution Chart */}
-      {eloChartData.length >= 2 && (
+      {eloChartData.length > 0 && (
         <div className="mt-4 rounded-xl bg-card p-4 shadow-card">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-display text-sm font-semibold flex items-center gap-1.5">📈 Evolución ELO</h3>
@@ -324,7 +345,15 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                 />
-                <Line type="monotone" dataKey="elo" stroke={eloPositionFilter === 'portero' ? 'hsl(var(--primary))' : eloPositionFilter === 'delantero' ? 'hsl(var(--secondary))' : 'hsl(var(--primary))'} strokeWidth={2} dot={false} name={eloPositionFilter === 'portero' ? 'ELO Portero' : eloPositionFilter === 'delantero' ? 'ELO Delantero' : 'ELO General'} />
+                <Line
+                  type="monotone"
+                  dataKey="elo"
+                  stroke={eloPositionFilter === 'portero' ? 'hsl(var(--primary))' : eloPositionFilter === 'delantero' ? 'hsl(var(--secondary))' : 'hsl(var(--primary))'}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 3 }}
+                  name={eloPositionFilter === 'portero' ? 'ELO Portero' : eloPositionFilter === 'delantero' ? 'ELO Delantero' : 'ELO General'}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
