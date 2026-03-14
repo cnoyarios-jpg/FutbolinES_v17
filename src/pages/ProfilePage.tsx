@@ -439,8 +439,19 @@ export default function ProfilePage({ onLogout }: ProfilePageProps) {
               <p className="font-display text-lg font-bold">{rating.bestStreak || 0}</p>
             </div>
             {bestPosition && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor posición</p><p className="font-semibold">{bestPosition}</p></div>}
-            {bestStyle && <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor modo</p><p className="font-semibold">{bestStyle}</p></div>}
-            {bestTable && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Mejor mesa</p><p className="font-semibold">{bestTable[0]} (ELO: {bestTable[1]})</p></div>}
+            {(() => {
+              const modes = Object.entries(contextStats.byMode);
+              if (modes.length === 0) return null;
+              const best = modes.sort(([,a],[,b]) => (b.matches > 0 ? b.wins/b.matches : 0) - (a.matches > 0 ? a.wins/a.matches : 0))[0];
+              return <div className="rounded-lg bg-muted p-2.5"><p className="text-muted-foreground">Mejor modo</p><p className="font-semibold capitalize">{best[0]}</p></div>;
+            })()}
+            {(() => {
+              const tables = Object.entries(contextStats.byTable);
+              if (tables.length === 0) return null;
+              const best = tables.sort(([,a],[,b]) => (b.matches > 0 ? b.wins/b.matches : 0) - (a.matches > 0 ? a.wins/a.matches : 0))[0];
+              const wr = best[1].matches > 0 ? Math.round((best[1].wins / best[1].matches) * 100) : 0;
+              return <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Mejor mesa</p><p className="font-semibold">{best[0]} ({wr}% WR)</p></div>;
+            })()}
             {topPartner && <div className="rounded-lg bg-muted p-2.5 col-span-2"><p className="text-muted-foreground">Compañero/a más frecuente</p><p className="font-semibold">{topPartner.partnerName} ({topPartner.count} veces)</p></div>}
           </div>
         </div>
