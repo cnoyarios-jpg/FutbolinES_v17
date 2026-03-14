@@ -79,6 +79,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       toast.error('La contraseña debe tener al menos 4 caracteres');
       return;
     }
+    // Postal code: required, exactly 5 digits
+    if (!postalCode.trim()) {
+      toast.error('El código postal es obligatorio');
+      return;
+    }
+    if (!/^\d{5}$/.test(postalCode.trim())) {
+      toast.error('El código postal debe ser exactamente 5 números');
+      return;
+    }
     if (nicknameError) {
       toast.error(nicknameError);
       return;
