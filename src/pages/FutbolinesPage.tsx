@@ -16,11 +16,13 @@ export default function FutbolinesPage() {
   const [, forceUpdate] = useState(0);
 
   const [venueForm, setVenueForm] = useState({
-    name: '', city: '', address: '', description: '',
+    name: '', postalCode: '', address: '', description: '',
     tableBrand: 'Presas' as TableBrand,
     tableQuantity: '1',
     tableCondition: 'buen_estado' as TableCondition,
   });
+
+  const derivedCity = venueForm.postalCode.length >= 2 ? getCityFromPostalCode(venueForm.postalCode) : '';
 
   const filteredVenues = useMemo(() => {
     return MOCK_VENUES.filter(v => {
