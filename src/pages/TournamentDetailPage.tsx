@@ -1350,27 +1350,15 @@ export default function TournamentDetailPage() {
                           {c.multiplier < 1 && (
                             <span>×{c.multiplier} (invitados)</span>
                           )}
+                          {c.contextCoefficient !== 1 && (
+                            <span>×{c.contextCoefficient.toFixed(2)} (contexto)</span>
+                          )}
                           <span>Aplicado total: <span className="font-semibold text-foreground">{c.totalAppliedChange >= 0 ? `+${c.totalAppliedChange}` : c.totalAppliedChange}</span></span>
                         </div>
                         <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
                           <span>Pos: {c.change >= 0 ? `+${c.change}` : c.change}</span>
                           <span>Gen: {c.generalChange >= 0 ? `+${c.generalChange}` : c.generalChange} ({c.previousGeneral}→{c.newGeneral})</span>
-                          <span>Modo: {c.modeChange >= 0 ? `+${c.modeChange}` : c.modeChange}</span>
-                          <span>Mesa: {c.tableChange >= 0 ? `+${c.tableChange}` : c.tableChange}</span>
                         </div>
-
-                        <details className="mt-1">
-                          <summary className="cursor-pointer text-[10px] font-medium text-primary">Ver ELO efectivo usado</summary>
-                          <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
-                            <span>ELO general: <span className="font-semibold text-foreground">{c.baseGeneralElo}</span></span>
-                            <span>ELO posición: <span className="font-semibold text-foreground">{c.basePositionElo}</span></span>
-                            <span>Ajuste modo: <span className="font-semibold text-foreground">{c.modeAdjust >= 0 ? `+${c.modeAdjust}` : c.modeAdjust}</span></span>
-                            <span>Ajuste mesa: <span className="font-semibold text-foreground">{c.tableAdjust >= 0 ? `+${c.tableAdjust}` : c.tableAdjust}</span></span>
-                            <span className="col-span-2">
-                              ELO efectivo = 0.6×{c.basePositionElo} + 0.4×{c.baseGeneralElo} + ({c.modeAdjust >= 0 ? `+${c.modeAdjust}` : c.modeAdjust}) + ({c.tableAdjust >= 0 ? `+${c.tableAdjust}` : c.tableAdjust}) = <span className="font-bold text-foreground">{c.effectiveElo}</span>
-                            </span>
-                          </div>
-                        </details>
                       </div>
                     ))}
                   </div>
