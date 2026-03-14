@@ -500,7 +500,8 @@ export default function TournamentDetailPage() {
 
       if (change.position === 'portero') ranking.asGoalkeeper -= change.change;
       else ranking.asForward -= change.change;
-      ranking.general -= change.generalChange;
+      // Recalculate general as average
+      ranking.general = Math.round((ranking.asGoalkeeper + ranking.asForward) / 2);
 
       // Revert context stats
       recordContextStats(change.userId, tournament.playStyle, tournament.tableBrand, change.won, { revert: true });
